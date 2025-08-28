@@ -63,6 +63,39 @@
         font-size: 14px;
         font-family: sans-serif;
       }
+      #reticle {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 18px;
+        height: 18px;
+        margin-left: -9px;
+        margin-top: -9px;
+        pointer-events: none;
+        opacity: 0.85;
+        z-index: 2;
+        display: none;
+      }
+      #reticle::before,
+      #reticle::after {
+        content: "";
+        position: absolute;
+        background: #ffffff;
+      }
+      #reticle::before {
+        left: 50%;
+        top: 0;
+        width: 2px;
+        height: 100%;
+        transform: translateX(-50%);
+      }
+      #reticle::after {
+        top: 50%;
+        left: 0;
+        width: 100%;
+        height: 2px;
+        transform: translateY(-50%);
+      }
     </style>
 
     <!-- Map bare specifiers used in src/main.js to CDN modules so we avoid bundler issues -->
@@ -79,6 +112,7 @@
   <body>
     <div id="info"><button id="start">Click to play</button></div>
     <button id="volumeToggle" aria-label="Toggle volume" title="Toggle volume">🔊</button>
+    <div id="reticle"></div>
     <div id="loading">
       <div class="spinner"></div>
       Loading splats...

@@ -99,6 +99,22 @@ const CONFIG = {
 			"lines/drink.mp3",
 		],
 	},
+
+	// Jenga tower (configurable)
+	JENGA: {
+		ENABLED: true,
+		SCALE: 0.2, // overall scale factor (adjustable)
+		LAYERS: 16,
+		BRICK: { LEN: 3.0, WID: 1.0, HT: 0.6, GAP: 0.001 }, // base dims before SCALE
+		ORIGIN: { x: -0.896, y: -0.063 - 0.7 + 0.001, z: 6.585 }, // bottom layer center (raised slightly)
+	},
+
+	// Grab/highlight
+	GRAB: {
+		MAX_DISTANCE: 2.0,
+		HOLD_DISTANCE: 1.2,
+		HIGHLIGHT_EMISSIVE: 0xffff00,
+	},
 };
 
 // Player collider constants
@@ -324,6 +340,65 @@ async function init() {
 	// ===== PHYSICS WORLD =====
 	const world = new RAPIER.World(CONFIG.GRAVITY);
 
+	// ===== JENGA TOWER SPAWN =====
+	// Track dynamic Jenga bricks for transform syncing
+	const jengaBlocks = [];
+	// Map rapier body handle -> mesh for generic lookup (projectiles, jenga, etc.)
+	const bodyToMesh = new Map();
+	function buildJengaTower(world, scene, cfg) {
+		const scale = cfg.SCALE;
+		const brickLen = cfg.BRICK.LEN * scale;
+		const brickWid = cfg.BRICK.WID * scale;
+		const brickHt = cfg.BRICK.HT * scale;
+		const gap = cfg.BRICK.GAP * scale;
+		const base = cfg.ORIGIN;
+
+		for (let layer = 0; layer < cfg.LAYERS; layer++) {
+			const alongZ = (layer % 2 === 0); // ||| then ___
+			const sizeX = alongZ ? brickWid : brickLen;
+			const sizeZ = alongZ ? brickLen : brickWid;
+			const halfX = sizeX / 2;
+			const halfY = brickHt / 2;
+			const halfZ = sizeZ / 2;
+			const y = base.y + halfY + layer * (brickHt + gap);
+
+			// place 3 bricks across the transverse axis
+			const pitch = (alongZ ? sizeX : sizeZ) + gap;
+			for (let i = -1; i <= 1; i += 1) {
+				const offset = i * pitch;
+				const x = alongZ ? base.x + offset : base.x;
+				const z = alongZ ? base.z : base.z + offset;
+
+				// THREE mesh
+				const geom = new THREE.BoxGeometry(sizeX, brickHt, sizeZ);
+				const mat = new THREE.MeshStandardMaterial({ color: 0x0f0fff, metalness: 0.1, roughness: 0.8 });
+				const mesh = new THREE.Mesh(geom, mat);
+				mesh.position.set(x, y, z);
+				scene.add(mesh);
+
+				// Rapier body + collider
+				const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
+					.setTranslation(x, y, z)
+					.setCanSleep(true)
+					.setLinearDamping(0.1)
+					.setAngularDamping(0.2);
+				const body = world.createRigidBody(bodyDesc);
+				const collider = RAPIER.ColliderDesc.cuboid(halfX, halfY, halfZ)
+					.setFriction(0.8)
+					.setRestitution(0.05);
+				world.createCollider(collider, body);
+
+				// Track mesh with body in animation loop (separate from projectiles)
+				jengaBlocks.push({ mesh, body });
+				bodyToMesh.set(body.handle, mesh);
+			}
+		}
+	}
+
+	if (CONFIG.JENGA.ENABLED) {
+		buildJengaTower(world, scene, CONFIG.JENGA);
+	}
+
 	// Create FPS player capsule body
 	let playerBody = null;
 	{
@@ -354,9 +429,13 @@ async function init() {
 	startButton.addEventListener("click", () => controls.lock());
 	controls.addEventListener("lock", () => {
 		infoElement.style.display = "none";
+		const r = document.getElementById("reticle");
+		if (r) r.style.display = "block";
 	});
 	controls.addEventListener("unlock", () => {
 		infoElement.style.display = "";
+		const r = document.getElementById("reticle");
+		if (r) r.style.display = "none";
 	});
 
 	// ===== AUDIO SYSTEM =====
@@ -614,6 +693,10 @@ async function init() {
 	let debugMode = false;
 	const debugVisuals = { orc: [], bartender: [] };
 
+	// Hover/grab state
+	let hover = { body: null, mesh: null, savedEmissive: null };
+	let grabbed = { body: null, mesh: null };
+
 	// Keyboard input
 	window.addEventListener("keydown", (e) => {
 		keyState[e.code] = true;
@@ -631,10 +714,46 @@ async function init() {
 				playerBody.setLinvel({ x: v.x, y: PLAYER_JUMP_SPEED, z: v.z }, true);
 			}
 		}
+
+		// Print player position and orientation (yaw/pitch) on 'P'
+		if (e.code === "KeyP") {
+			if (playerBody) {
+				const p = playerBody.translation();
+				const posStr = `pos=(${p.x.toFixed(3)}, ${p.y.toFixed(3)}, ${p.z.toFixed(3)})`;
+				const forward = new THREE.Vector3();
+				camera.getWorldDirection(forward);
+				forward.normalize();
+				// yaw around Y, pitch around X
+				const yaw = Math.atan2(forward.x, forward.z) * 180 / Math.PI;
+				const pitch = Math.asin(THREE.MathUtils.clamp(forward.y, -1, 1)) * 180 / Math.PI;
+				const rot = playerBody.rotation?.();
+				const rotStr = rot ? `quat=(${rot.x.toFixed(3)}, ${rot.y.toFixed(3)}, ${rot.z.toFixed(3)}, ${rot.w.toFixed(3)})` : "";
+				console.log(`[Player] ${posStr}  yaw=${yaw.toFixed(1)}°  pitch=${pitch.toFixed(1)}°  ${rotStr}`);
+			} else {
+				console.log("[Player] body not initialized yet");
+			}
+		}
 	});
 
 	window.addEventListener("keyup", (e) => {
 		keyState[e.code] = false;
+	});
+
+	// Click: grab/release or shoot if nothing hovered
+	window.addEventListener("click", () => {
+		if (!controls.isLocked) return;
+		// If currently holding something, release it
+		if (grabbed.body) {
+			grabbed = { body: null, mesh: null };
+			return;
+		}
+		// If hovering a valid mapped mesh, grab it
+		if (hover.body && hover.mesh) {
+			grabbed = { body: hover.body, mesh: hover.mesh };
+			return;
+		}
+		// Otherwise shoot
+		shootProjectile();
 	});
 
 	function isPlayerGrounded() {
@@ -815,12 +934,8 @@ async function init() {
 			body,
 			lastVelocity: velocity.clone(),
 		});
+		bodyToMesh.set(body.handle, mesh);
 	}
-
-	// Shooting on click
-	window.addEventListener("click", () => {
-		if (controls.isLocked) shootProjectile();
-	});
 
 	// ===== ANIMATION LOOP =====
 	let previousTime = performance.now();
@@ -886,6 +1001,37 @@ async function init() {
 				projectile.lastVelocity.copy(currentVelocity);
 			}
 
+			// Sync Jenga blocks (no special collision audio)
+			for (const block of jengaBlocks) {
+				const pos = block.body.translation();
+				const rot = block.body.rotation();
+				block.mesh.position.set(pos.x, pos.y, pos.z);
+				block.mesh.quaternion.set(rot.x, rot.y, rot.z, rot.w);
+			}
+
+			// While grabbed: hold object in front of camera
+			if (grabbed.body) {
+				const forward = new THREE.Vector3();
+				camera.getWorldDirection(forward);
+				forward.normalize();
+				const holdPos = camera.position.clone().addScaledVector(forward, CONFIG.GRAB.HOLD_DISTANCE);
+				grabbed.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+				grabbed.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+				grabbed.body.setTranslation({ x: holdPos.x, y: holdPos.y, z: holdPos.z }, true);
+
+				// Canonical rotation: face the camera direction with world-up (yaw-aligned)
+				const yawForward = new THREE.Vector3(forward.x, 0, forward.z);
+				if (yawForward.lengthSq() < 1e-6) yawForward.set(0, 0, 1);
+				yawForward.normalize();
+				const up = new THREE.Vector3(0, 1, 0);
+				const right = new THREE.Vector3().crossVectors(up, yawForward).normalize();
+				// Recompute up to ensure orthonormal basis
+				const trueUp = new THREE.Vector3().crossVectors(yawForward, right).normalize();
+				const basis = new THREE.Matrix4().makeBasis(right, trueUp, yawForward);
+				const q = new THREE.Quaternion().setFromRotationMatrix(basis);
+				grabbed.body.setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }, true);
+			}
+
 			physicsAccumulator -= FIXED_TIME_STEP;
 		}
 
@@ -898,6 +1044,9 @@ async function init() {
 
 		// Update Spark accumulation/sorting if autoUpdate path misses it
 		sparkRenderer?.update({ scene });
+
+		// Update hover highlight
+		updateHover();
 
 		// Update character animations
 		for (const mixer of Object.values(animationMixers)) {
@@ -925,6 +1074,55 @@ async function init() {
 		}
 
 		renderer.render(scene, camera);
+	}
+
+	function updateHover() {
+		// Clear previous highlight
+		if (hover.mesh && hover.savedEmissive != null) {
+			const m = hover.mesh.material;
+			if (m && m.emissive) m.emissive.setHex(hover.savedEmissive);
+		}
+		hover = { body: null, mesh: null, savedEmissive: null };
+
+		const forward = new THREE.Vector3();
+		camera.getWorldDirection(forward);
+		forward.normalize();
+		// Start slightly in front of the capsule to avoid self-hits
+		const startOffset = (PLAYER_RADIUS || 0.3) + 0.05;
+		// const startOffset =  0.05;
+		const start = camera.position.clone().addScaledVector(forward, startOffset);
+		const origin = { x: start.x, y: start.y, z: start.z };
+		const dir = { x: forward.x, y: forward.y, z: forward.z };
+		const ray = new RAPIER.Ray(origin, dir);
+
+		// Iteratively cast and skip colliders until we find a mapped dynamic body
+		let excludeColliderHandle = undefined;
+		let pickedBody = null;
+		let iterations = 0;
+		while (iterations++ < 12) {
+			const hit = world.castRay(ray, CONFIG.GRAB.MAX_DISTANCE, true, undefined, excludeColliderHandle);
+			if (!hit || !hit.collider) break;
+			const collider = hit.collider;
+			excludeColliderHandle = collider.handle; // skip this one next pass
+			const body = (collider.parent && typeof collider.parent === 'function') ? collider.parent() : collider.parent;
+			if (!body) continue;
+			if (playerBody && body.handle === playerBody.handle) continue;
+			if (grabbed.body && body.handle === grabbed.body.handle) continue;
+			if (typeof body.isDynamic === 'function' && !body.isDynamic()) continue;
+			// Must have a mapped mesh we can highlight/grab
+			if (!bodyToMesh.get(body.handle)) continue;
+			pickedBody = body;
+			break;
+		}
+
+		if (!pickedBody) return;
+		const mesh = bodyToMesh.get(pickedBody.handle);
+		if (!mesh) return;
+		const mat = mesh.material;
+		if (mat && mat.emissive) {
+			hover = { body: pickedBody, mesh, savedEmissive: mat.emissive.getHex() };
+			mat.emissive.setHex(CONFIG.GRAB.HIGHLIGHT_EMISSIVE);
+		}
 	}
 
 	// ===== WINDOW RESIZE HANDLING =====
