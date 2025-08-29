@@ -111,7 +111,7 @@ const CONFIG = {
 
 	// Grab/highlight
 	GRAB: {
-		MAX_DISTANCE: 2.0,
+		MAX_DISTANCE: 3.0,
 		HOLD_DISTANCE: 1.2,
 		HIGHLIGHT_EMISSIVE: 0xffff00,
 	},
@@ -345,6 +345,11 @@ async function init() {
 	const jengaBlocks = [];
 	// Map rapier body handle -> mesh for generic lookup (projectiles, jenga, etc.)
 	const bodyToMesh = new Map();
+	// Set of projectile rigid body handles (ignored for hover/grab)
+	const projectileBodies = new Set();
+	// Mesh → body mapping and list of grabbable meshes for THREE.Raycaster
+	const meshToBody = new Map();
+	const grabbableMeshes = [];
 	function buildJengaTower(world, scene, cfg) {
 		const scale = cfg.SCALE;
 		const brickLen = cfg.BRICK.LEN * scale;
@@ -391,6 +396,8 @@ async function init() {
 				// Track mesh with body in animation loop (separate from projectiles)
 				jengaBlocks.push({ mesh, body });
 				bodyToMesh.set(body.handle, mesh);
+				meshToBody.set(mesh, body);
+				grabbableMeshes.push(mesh);
 			}
 		}
 	}
@@ -935,6 +942,7 @@ async function init() {
 			lastVelocity: velocity.clone(),
 		});
 		bodyToMesh.set(body.handle, mesh);
+		projectileBodies.add(body.handle);
 	}
 
 	// ===== ANIMATION LOOP =====
@@ -1084,43 +1092,20 @@ async function init() {
 		}
 		hover = { body: null, mesh: null, savedEmissive: null };
 
-		const forward = new THREE.Vector3();
-		camera.getWorldDirection(forward);
-		forward.normalize();
-		// Start slightly in front of the capsule to avoid self-hits
-		const startOffset = (PLAYER_RADIUS || 0.3) + 0.05;
-		// const startOffset =  0.05;
-		const start = camera.position.clone().addScaledVector(forward, startOffset);
-		const origin = { x: start.x, y: start.y, z: start.z };
-		const dir = { x: forward.x, y: forward.y, z: forward.z };
-		const ray = new RAPIER.Ray(origin, dir);
-
-		// Iteratively cast and skip colliders until we find a mapped dynamic body
-		let excludeColliderHandle = undefined;
-		let pickedBody = null;
-		let iterations = 0;
-		while (iterations++ < 12) {
-			const hit = world.castRay(ray, CONFIG.GRAB.MAX_DISTANCE, true, undefined, excludeColliderHandle);
-			if (!hit || !hit.collider) break;
-			const collider = hit.collider;
-			excludeColliderHandle = collider.handle; // skip this one next pass
-			const body = (collider.parent && typeof collider.parent === 'function') ? collider.parent() : collider.parent;
-			if (!body) continue;
-			if (playerBody && body.handle === playerBody.handle) continue;
-			if (grabbed.body && body.handle === grabbed.body.handle) continue;
-			if (typeof body.isDynamic === 'function' && !body.isDynamic()) continue;
-			// Must have a mapped mesh we can highlight/grab
-			if (!bodyToMesh.get(body.handle)) continue;
-			pickedBody = body;
-			break;
-		}
-
-		if (!pickedBody) return;
-		const mesh = bodyToMesh.get(pickedBody.handle);
+		// Use THREE.Raycaster against grabbable meshes for robust picking
+		const raycaster = new THREE.Raycaster();
+		raycaster.far = CONFIG.GRAB.MAX_DISTANCE;
+		raycaster.setFromCamera({ x: 0, y: 0 }, camera);
+		const hits = raycaster.intersectObjects(grabbableMeshes, false);
+		if (!hits || hits.length === 0) return;
+		const hit = hits.find(h => h.distance <= CONFIG.GRAB.MAX_DISTANCE);
+		if (!hit) return;
+		const mesh = hit.object;
+		const bestBody = meshToBody.get(mesh);
 		if (!mesh) return;
 		const mat = mesh.material;
 		if (mat && mat.emissive) {
-			hover = { body: pickedBody, mesh, savedEmissive: mat.emissive.getHex() };
+			hover = { body: bestBody, mesh, savedEmissive: mat.emissive.getHex() };
 			mat.emissive.setHex(CONFIG.GRAB.HIGHLIGHT_EMISSIVE);
 		}
 	}
