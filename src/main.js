@@ -36,14 +36,16 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 // CONFIGURATION
 // ===================================================================================================
 
+const GLOBAL_SCALE = 2.2;
+
 const CONFIG = {
 	// Physics
-	GRAVITY: { x: 0, y: -9.81, z: 0 },
+	GRAVITY: { x: 0, y: -9.81 * GLOBAL_SCALE, z: 0 },
 	RAPIER_INIT_TIMEOUT: 10000,
 
 	// Movement
-	MOVE_SPEED: 3,
-	PROJECTILE_SPEED: 15,
+	MOVE_SPEED: 3 * GLOBAL_SCALE,
+	PROJECTILE_SPEED: 15 * GLOBAL_SCALE,
 
 	// Audio
 	VOICE_COOLDOWN: 1.0,
@@ -51,7 +53,7 @@ const CONFIG = {
 	VOICE_VOLUME: 0.4,
 
 	// Physics Objects
-	PROJECTILE_RADIUS: 0.2,
+	PROJECTILE_RADIUS: 0.2 * GLOBAL_SCALE,
 	PROJECTILE_RESTITUTION: 0.9,
 	ENVIRONMENT_RESTITUTION: 0.0,
 	BONE_COLLIDER_RADIUS: 0.3,
@@ -64,8 +66,10 @@ const CONFIG = {
 
 	// Assets
 	ENVIRONMENT: {
-		MESH: "kitchen_mesh.glb",
-		SPLATS: "kitchen_splats_500k.spz",
+		// MESH: "kitchen_mesh.glb",
+		// SPLATS: "kitchen_splats_500k.spz",
+		MESH: "britt_stitched.glb",
+		SPLATS: "britt_stitched.spz",
 		SPLAT_SCALE: 3,
 	},
 
@@ -78,7 +82,7 @@ const CONFIG = {
 		},
 		BARTENDER: {
 			MODEL: "Bartending.fbx",
-			POSITION: [1.2, -1.0, 2],
+			POSITION: [3.0, -1.0, 2],
 			ROTATION: -Math.PI / 2,
 			SCALE: [0.007, 0.007, 0.007],
 		},
@@ -118,11 +122,11 @@ const CONFIG = {
 };
 
 // Player collider constants
-const PLAYER_RADIUS = 0.3;
-const PLAYER_HALF_HEIGHT = 0.5; // total height ~= 2*half + 2*radius => 1.6m
-const PLAYER_EYE_HEIGHT = 1.0; // camera height above ground
-const PLAYER_JUMP_SPEED = 6.0; // jump impulse
-const PROJECTILE_SPAWN_OFFSET = PLAYER_RADIUS + CONFIG.PROJECTILE_RADIUS + 0.15;
+const PLAYER_RADIUS = 0.2 * GLOBAL_SCALE;
+const PLAYER_HALF_HEIGHT = 0.5 * GLOBAL_SCALE; // total height ~= 2*half + 2*radius => 1.6m
+const PLAYER_EYE_HEIGHT = 1.0 * GLOBAL_SCALE; // camera height above ground
+const PLAYER_JUMP_SPEED = 8.0 * GLOBAL_SCALE; // jump impulse
+const PROJECTILE_SPAWN_OFFSET = PLAYER_RADIUS + CONFIG.PROJECTILE_RADIUS + 0.15 * GLOBAL_SCALE;
 
 // ===================================================================================================
 // UTILITY FUNCTIONS
@@ -587,6 +591,7 @@ async function init() {
 	const gltfLoader = new GLTFLoader();
 	gltfLoader.load(CONFIG.ENVIRONMENT.MESH, (gltf) => {
 		environment = gltf.scene;
+		environment.scale.set(-1, -1, 1);
 		scene.add(environment);
 
 		// Create physics colliders from mesh geometry
