@@ -36,7 +36,8 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 // CONFIGURATION
 // ===================================================================================================
 
-const GLOBAL_SCALE = 2.2;
+// const GLOBAL_SCALE = 2.2;
+const GLOBAL_SCALE = .7;
 
 const CONFIG = {
 	// Physics
@@ -68,21 +69,23 @@ const CONFIG = {
 	ENVIRONMENT: {
 		// MESH: "kitchen_mesh.glb",
 		// SPLATS: "kitchen_splats_500k.spz",
-		MESH: "britt_stitched.glb",
-		SPLATS: "britt_stitched.spz",
+		// MESH: "britt_stitched.glb",
+		// SPLATS: "britt_stitched.spz",
+		MESH: "hobbit_stitched.glb",
+		SPLATS: "hobbit_stitched.spz",
 		SPLAT_SCALE: 3,
 	},
 
 	CHARACTERS: {
 		ORC: {
 			MODEL: "orc.glb",
-			POSITION: [-2, -1.2, 2],
+			POSITION: [-2, -.8, 0],
 			ROTATION: Math.PI / 2,
 			SCALE: [1, 1, 1],
 		},
 		BARTENDER: {
 			MODEL: "Bartending.fbx",
-			POSITION: [3.0, -1.0, 2],
+			POSITION: [3.0, -.7, 2],
 			ROTATION: -Math.PI / 2,
 			SCALE: [0.007, 0.007, 0.007],
 		},
@@ -91,6 +94,7 @@ const CONFIG = {
 	AUDIO_FILES: {
 		BOUNCE: "bounce.mp3",
 		BACKGROUND_MUSIC: "kitchen_music.mp3",
+		// BACKGROUND_MUSIC: "hobbit_music.mp3",
 		ORC_VOICES: [
 			"lines/rocks.mp3",
 			"lines/mushroom.mp3",
@@ -110,7 +114,7 @@ const CONFIG = {
 		SCALE: 0.2, // overall scale factor (adjustable)
 		LAYERS: 16,
 		BRICK: { LEN: 3.0, WID: 1.0, HT: 0.6, GAP: 0.001 }, // base dims before SCALE
-		ORIGIN: { x: -0.896, y: -0.063 - 0.7 + 0.001, z: 6.585 }, // bottom layer center (raised slightly)
+		ORIGIN: { x: -0.896, y: -0.063 - 0.7 + 0.001, z: 6.385 }, // bottom layer center (raised slightly)
 	},
 
 	// Grab/highlight
@@ -122,7 +126,8 @@ const CONFIG = {
 };
 
 // Player collider constants
-const PLAYER_RADIUS = 0.2 * GLOBAL_SCALE;
+// const PLAYER_RADIUS = 0.2 * GLOBAL_SCALE;
+const PLAYER_RADIUS = 0.1 * GLOBAL_SCALE;
 const PLAYER_HALF_HEIGHT = 0.5 * GLOBAL_SCALE; // total height ~= 2*half + 2*radius => 1.6m
 const PLAYER_EYE_HEIGHT = 1.0 * GLOBAL_SCALE; // camera height above ground
 const PLAYER_JUMP_SPEED = 8.0 * GLOBAL_SCALE; // jump impulse
@@ -327,7 +332,7 @@ async function init() {
 
 	// ===== LIGHTING SETUP =====
 	// Warm hemisphere lighting
-	const hemiLight = new THREE.HemisphereLight(0xfff4e6, 0x2a1a0a, 0.5);
+	const hemiLight = new THREE.HemisphereLight(0xfff4e6, 0x2a1a0a, 1.0);
 	hemiLight.position.set(0, 20, 0);
 	scene.add(hemiLight);
 
