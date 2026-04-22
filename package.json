@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "python3 -m http.server 3000 -d out",
-    "preview": "python3 -m http.server 3000 -d out"
+    "start": "next start",
+    "preview": "next start"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.12.0",

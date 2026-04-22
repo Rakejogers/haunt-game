@@ -1,66 +1,70 @@
-# Deploying to Netlify
+# Deploying to Vercel
 
-This guide covers the static Next.js export used by this project.
+This project now relies on Next.js server routes for xAI ephemeral token minting, so it should be deployed to a runtime-capable host such as Vercel.
 
 ## Prerequisites
 
 1. Make sure your code is pushed to a Git repository (GitHub, GitLab, or Bitbucket)
-2. Have a Netlify account (free at netlify.com)
+2. Have a Vercel account
+3. Create an xAI API key and save it as `XAI_API_KEY`
 
 ## Deployment Steps
 
-### Option 1: Deploy via Netlify UI (Recommended)
+### Option 1: Deploy via Vercel UI
 
-1. **Go to Netlify Dashboard**
-   - Visit [netlify.com](https://netlify.com) and sign in
-   - Click "Add new site" → "Import an existing project"
+1. **Go to Vercel Dashboard**
+   - Visit [vercel.com](https://vercel.com) and sign in
+   - Click "Add New..." → "Project"
 
 2. **Connect Your Repository**
    - Choose your Git provider (GitHub, GitLab, etc.)
    - Select your repository containing this project
 
-3. **Configure Build Settings**
-   - **Build command**: `npm run build`
-   - **Publish directory**: `out`
-   - Click "Deploy site"
+3. **Configure Environment Variables**
+   - Add `XAI_API_KEY` in the project settings before the first production deploy
 
-### Option 2: Deploy via Netlify CLI
+4. **Deploy**
+   - Vercel will detect Next.js automatically
+   - The default build command `next build` is sufficient
 
-1. **Install Netlify CLI**
+### Option 2: Deploy via Vercel CLI
+
+1. **Install Vercel CLI**
    ```bash
-   npm install -g netlify-cli
+   npm install -g vercel
    ```
 
-2. **Login to Netlify**
+2. **Login to Vercel**
    ```bash
-   netlify login
+   vercel login
    ```
 
 3. **Deploy**
    ```bash
-   netlify deploy --prod
+   vercel --prod
    ```
 
 ## Important Notes
 
-- The `netlify.toml` file is configured to publish the Next static export from `out`
-- WASM files are served with the correct MIME type
-- COOP and COEP headers are configured for SharedArrayBuffer support, which Rapier needs
-- The site will automatically redeploy when you push changes to your repository
+- Set `XAI_API_KEY` in every environment that needs voice chat
+- COOP and COEP headers are configured in `next.config.mjs` for SharedArrayBuffer support
+- WASM assets are explicitly served with the correct MIME type
+- The browser authenticates to xAI using ephemeral tokens only; the API key stays server-side
 
 ## Troubleshooting
 
 If you encounter issues:
 
-1. **Check build logs** in the Netlify dashboard
-2. **Verify WASM files** are being served correctly
-3. **Test locally** with `npm run build` and `npm run preview` before deploying
+1. **Check Vercel function logs** for `/api/grok/session` or `/api/grok/briefing`
+2. **Verify `XAI_API_KEY`** is present in the deployment environment
+3. **Confirm cross-origin isolation headers** are present in the deployed response
+4. **Test locally** with `npm run dev` before deploying
 
 ## File Size Considerations
 
 Your project includes large assets:
-- `tavern_splats.spz` (26MB)
-- `tavern_mesh.glb` (11MB)
-- `orc.glb` (4.8MB)
+- `elegant_library_with_fireplace_2m.spz`
+- `elegant_library_with_fireplace_collider.glb`
+- `mob_boss_sitting.fbx`
 
-These will be uploaded to Netlify and served from their CDN. The first load might be slow, but subsequent loads will be cached.
+These assets are large enough that the first load may take a moment. Subsequent requests should be cached by the hosting edge.

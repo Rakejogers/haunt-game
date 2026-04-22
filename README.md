@@ -1,33 +1,34 @@
-# Interactive Tavern Demo
+# Haunt Game
 
-### Try it out @ https://spark-physics.netlify.app
+An atmospheric first-person investigation slice built with Next.js, Three.js, Spark splats, and Rapier physics.
 
 ![Tavern Demo](tavern.gif)
 
-A showcase of [**Spark**](https://sparkjs.dev/) Gaussian splats, **Rapier Physics**, and **Three.js**, now hosted inside a minimal Next.js App Router shell.
+A single NPC, `mob_boss_sitting`, guards a secret. Walk up, press `E`, and use Grok voice chat to try to pry the truth out of them.
 
 ## Features
 
 - Gaussian splat rendering with a collision-mesh fallback
-- Rapier-powered physics for player movement and projectiles
-- Animated characters with bone-level collision detection
-- Spatial audio with distance-based volume and bounce-driven pitch
-- Pointer-lock first-person controls and an in-scene grab system
-- Debug mode for toggling the collision mesh and bone collider overlays
+- Rapier-powered first-person movement
+- One focused NPC interaction loop
+- Grok realtime voice chat over xAI ephemeral tokens
+- On-screen transcript, dialogue states, and objective tracking
+- Runtime-ready Next.js deployment for Vercel
 
 ## Controls
 
-- `Click`: Enter first-person mode / shoot projectiles
+- `Click`: Enter first-person mode
 - `WASD`: Move around the tavern
 - `R` / `F`: Fly up and down
 - `Space`: Jump
-- `M`: Toggle debug mode
-- `P`: Log the player transform to the console
+- `E`: Talk to the mob boss when prompted
+- `Esc`: Leave the conversation overlay
 
 ## Getting started
 
 ```bash
 npm install
+echo "XAI_API_KEY=your_key_here" > .env.local
 npm run dev
 ```
 
@@ -37,7 +38,7 @@ The Next.js dev server runs on [http://localhost:3000](http://localhost:3000) by
 
 ```bash
 npm run build
-npm run preview
+npm start
 ```
 
-`npm run build` creates a static export in `out/`, which can be deployed to static hosting as long as the required COOP and COEP headers are preserved.
+Deploy this app to Vercel or another runtime-capable Next.js host. The app uses a server route to mint ephemeral xAI tokens, so it is no longer a static export.

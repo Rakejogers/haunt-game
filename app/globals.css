@@ -6,11 +6,23 @@ body {
 }
 
 body {
-	font-family: Arial, Helvetica, sans-serif;
+	font-family: "Avenir Next", Avenir, Helvetica, Arial, sans-serif;
 }
 
 * {
 	box-sizing: border-box;
+}
+
+:root {
+	color-scheme: dark;
+	--panel-bg: rgb(10 10 12 / 82%);
+	--panel-border: rgb(255 255 255 / 14%);
+	--panel-shadow: 0 24px 80px rgb(0 0 0 / 42%);
+	--accent: #f2c277;
+	--accent-strong: #ffd49b;
+	--success: #8ed38d;
+	--error: #ff9a93;
+	--text-soft: rgb(255 255 255 / 72%);
 }
 
 .tavernPage {
@@ -34,18 +46,37 @@ body {
 
 .tavernInfo {
 	position: absolute;
-	top: 10px;
+	top: 22px;
 	left: 0;
 	width: 100%;
 	text-align: center;
 	color: #fff;
-	z-index: 1;
+	z-index: 3;
 }
 
 .tavernButton {
-	padding: 10px 20px;
-	font-size: 20px;
+	padding: 12px 20px;
+	border: 1px solid rgb(255 255 255 / 18%);
+	border-radius: 999px;
+	background: linear-gradient(180deg, rgb(36 29 20 / 92%), rgb(19 16 12 / 92%));
+	color: #fff6e8;
+	font-size: 18px;
+	letter-spacing: 0.02em;
 	cursor: pointer;
+}
+
+.tavernButton:disabled {
+	cursor: progress;
+	opacity: 0.68;
+}
+
+.tavernHint {
+	margin: 12px auto 0;
+	max-width: 480px;
+	padding: 0 16px;
+	color: var(--text-soft);
+	font-size: 14px;
+	line-height: 1.45;
 }
 
 .tavernLoading {
@@ -57,7 +88,7 @@ body {
 	color: #fff;
 	font-size: 18px;
 	text-align: center;
-	z-index: 1;
+	z-index: 3;
 }
 
 .tavernSpinner {
@@ -134,6 +165,245 @@ body {
 	font-size: 14px;
 	line-height: 1.4;
 	z-index: 3;
+}
+
+.tavernPrompt {
+	position: absolute;
+	left: 50%;
+	bottom: 34px;
+	transform: translateX(-50%);
+	padding: 10px 16px;
+	border: 1px solid rgb(255 255 255 / 18%);
+	border-radius: 999px;
+	background: rgb(0 0 0 / 70%);
+	color: #fff;
+	font-size: 14px;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	z-index: 3;
+}
+
+.tavernObjective {
+	position: absolute;
+	left: 16px;
+	bottom: 16px;
+	max-width: min(360px, calc(100vw - 32px));
+	padding: 14px 16px;
+	border: 1px solid var(--panel-border);
+	border-radius: 18px;
+	background: var(--panel-bg);
+	box-shadow: var(--panel-shadow);
+	color: #fff;
+	z-index: 3;
+	backdrop-filter: blur(12px);
+}
+
+.tavernObjectiveLabel {
+	display: block;
+	margin-bottom: 6px;
+	color: var(--accent-strong);
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.16em;
+	text-transform: uppercase;
+}
+
+.tavernObjective p {
+	margin: 0;
+	color: #fff;
+	font-size: 14px;
+	line-height: 1.45;
+}
+
+.conversationPanel {
+	position: absolute;
+	top: 24px;
+	right: 24px;
+	width: min(460px, calc(100vw - 32px));
+	max-height: calc(100vh - 48px);
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+	padding: 20px;
+	border: 1px solid var(--panel-border);
+	border-radius: 24px;
+	background:
+		radial-gradient(circle at top, rgb(255 212 155 / 10%), transparent 40%),
+		var(--panel-bg);
+	box-shadow: var(--panel-shadow);
+	color: #fff;
+	z-index: 5;
+	backdrop-filter: blur(16px);
+}
+
+.conversationHeader {
+	display: flex;
+	justify-content: space-between;
+	align-items: flex-start;
+	gap: 12px;
+}
+
+.conversationHeader h2 {
+	margin: 4px 0 0;
+	font-size: 28px;
+	font-weight: 700;
+}
+
+.conversationEyebrow {
+	margin: 0;
+	color: var(--accent-strong);
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.18em;
+	text-transform: uppercase;
+}
+
+.conversationHeaderActions {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-end;
+	gap: 10px;
+}
+
+.conversationStatus {
+	padding: 8px 12px;
+	border-radius: 999px;
+	background: rgb(255 255 255 / 8%);
+	color: #fff;
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+
+.conversationStatus--connecting,
+.conversationStatus--thinking {
+	color: var(--accent-strong);
+}
+
+.conversationStatus--speaking,
+.conversationStatus--listening {
+	color: #b9ddff;
+}
+
+.conversationStatus--complete {
+	color: var(--success);
+}
+
+.conversationStatus--error {
+	color: var(--error);
+}
+
+.conversationClose {
+	padding: 10px 14px;
+	border: 1px solid rgb(255 255 255 / 16%);
+	border-radius: 999px;
+	background: rgb(255 255 255 / 6%);
+	color: #fff;
+	cursor: pointer;
+}
+
+.conversationObjective {
+	margin: 0;
+	color: var(--text-soft);
+	font-size: 14px;
+	line-height: 1.45;
+}
+
+.conversationTranscript {
+	min-height: 260px;
+	max-height: min(48vh, 520px);
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	overflow: auto;
+	padding-right: 4px;
+}
+
+.conversationBubble {
+	padding: 14px 16px;
+	border-radius: 18px;
+	background: rgb(255 255 255 / 6%);
+}
+
+.conversationBubble--user {
+	background: rgb(132 189 255 / 14%);
+}
+
+.conversationBubble--assistant {
+	background: rgb(255 216 164 / 10%);
+}
+
+.conversationBubble p {
+	margin: 0;
+	line-height: 1.5;
+}
+
+.conversationSpeaker {
+	margin-bottom: 6px !important;
+	color: var(--accent-strong);
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+}
+
+.conversationEmpty {
+	margin: auto 0;
+	color: var(--text-soft);
+	line-height: 1.6;
+	text-align: center;
+}
+
+.conversationFooter {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.conversationHint,
+.conversationError,
+.conversationSuccess {
+	margin: 0;
+	font-size: 13px;
+	line-height: 1.45;
+}
+
+.conversationHint {
+	color: var(--text-soft);
+}
+
+.conversationError {
+	color: var(--error);
+}
+
+.conversationSuccess {
+	color: var(--success);
+}
+
+kbd {
+	padding: 2px 6px;
+	border: 1px solid rgb(255 255 255 / 18%);
+	border-radius: 8px;
+	background: rgb(255 255 255 / 8%);
+	font: inherit;
+	font-size: 12px;
+}
+
+@media (max-width: 900px) {
+	.conversationPanel {
+		top: auto;
+		right: 16px;
+		bottom: 16px;
+		left: 16px;
+		width: auto;
+		max-height: min(70vh, 620px);
+	}
+
+	.tavernObjective {
+		right: 16px;
+		max-width: none;
+	}
 }
 
 @keyframes tavernSpin {

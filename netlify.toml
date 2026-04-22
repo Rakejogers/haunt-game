@@ -1,9 +1,5 @@
-[build]
-  command = "npm run build"
-  publish = "out"
-
-[build.environment]
-  NODE_VERSION = "18"
+# Legacy reference only. Production deployment now targets Vercel.
+# If you use Netlify manually, keep these headers aligned with next.config.mjs.
 
 [[headers]]
   for = "/*.wasm"
