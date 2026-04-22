@@ -71,23 +71,25 @@ const CONFIG = {
 		// SPLATS: "kitchen_splats_500k.spz",
 		// MESH: "britt_stitched.glb",
 		// SPLATS: "britt_stitched.spz",
-		MESH: "hobbit_stitched.glb",
-		SPLATS: "hobbit_stitched.spz",
+		// MESH: "hobbit_stitched.glb",
+		// SPLATS: "hobbit_stitched.spz",
+		SPLATS: "elegant_library_with_fireplace_2m.spz",
+		MESH: "elegant_library_with_fireplace_collider.glb",
 		SPLAT_SCALE: 3,
 	},
 
 	CHARACTERS: {
 		ORC: {
 			MODEL: "orc.glb",
-			POSITION: [-2, -.8, 0],
+			POSITION: [-2, -5, 2],
 			ROTATION: Math.PI / 2,
 			SCALE: [1, 1, 1],
 		},
 		BARTENDER: {
-			MODEL: "Bartending.fbx",
-			POSITION: [3.0, -.7, 2],
-			ROTATION: -Math.PI / 2,
-			SCALE: [0.007, 0.007, 0.007],
+			MODEL: "mob_boss_sitting.fbx",
+			POSITION: [.69, -.7, 2.75],
+			ROTATION: -Math.PI / 1.5,
+			SCALE: [0.005, 0.005, 0.005],
 		},
 	},
 
@@ -122,6 +124,15 @@ const CONFIG = {
 		MAX_DISTANCE: 3.0,
 		HOLD_DISTANCE: 1.2,
 		HIGHLIGHT_EMISSIVE: 0xffff00,
+	},
+
+	// Spawn: downward ray from this height at xz finds floor once collision mesh exists
+	PLAYER_SPAWN: {
+		x: 0,
+		z: 0,
+		rayOriginY: 10,
+		rayMaxDistance: 60,
+		fallbackCenterY: 1 * GLOBAL_SCALE, // used if floor ray misses
 	},
 };
 
@@ -415,6 +426,10 @@ async function init() {
 		buildJengaTower(world, scene, CONFIG.JENGA);
 	}
 
+	// Physics stepping is deferred until environment trimesh exists so the player
+	// does not free-fall and embed inside the mesh (which breaks movement).
+	let envCollisionReady = false;
+
 	// Create FPS player capsule body
 	let playerBody = null;
 	{
@@ -432,6 +447,25 @@ async function init() {
 			.setFriction(0.8)
 			.setRestitution(0.0);
 		world.createCollider(colliderDesc, playerBody);
+	}
+
+	function placePlayerOnSpawn() {
+		if (!playerBody) return;
+		const { x: sx, z: sz, rayOriginY, rayMaxDistance, fallbackCenterY } =
+			CONFIG.PLAYER_SPAWN;
+		const ray = new RAPIER.Ray(
+			{ x: sx, y: rayOriginY, z: sz },
+			{ x: 0, y: -1, z: 0 },
+		);
+		const hit = world.castRayAndGetNormal(ray, rayMaxDistance, true);
+		let centerY = fallbackCenterY;
+		if (hit && hit.toi > 0.05) {
+			const floorY = rayOriginY - hit.toi;
+			centerY = floorY + PLAYER_HALF_HEIGHT + PLAYER_RADIUS + 0.25;
+		}
+		playerBody.setLinvel({ x: 0, y: 0, z: 0 }, true);
+		playerBody.setAngvel({ x: 0, y: 0, z: 0 }, true);
+		playerBody.setTranslation({ x: sx, y: centerY, z: sz }, true);
 	}
 
 	// ===== CONTROLS SETUP =====
@@ -625,6 +659,10 @@ async function init() {
 				world.createCollider(colliderDesc, body);
 			}
 		});
+
+		envCollisionReady = true;
+		placePlayerOnSpawn();
+		physicsAccumulator = 0;
 
 		console.log("✓ Environment collision mesh loaded");
 	});
@@ -903,7 +941,8 @@ async function init() {
 		const lookahead = PLAYER_RADIUS + 0.1;
 		const hit = world.castRayAndGetNormal(ray, lookahead, true);
 		const normal = hit?.normal;
-		if (normal) {
+		// Ignore grazing / immediate hits (e.g. ray origin slightly inside geometry)
+		if (normal && hit.toi > 0.02) {
 			// Remove into-wall component: slide along wall
 			const n = new THREE.Vector3(normal.x, normal.y, normal.z);
 			n.y = 0; // only consider horizontal wall normal
@@ -978,7 +1017,10 @@ async function init() {
 			Math.floor(physicsAccumulator / FIXED_TIME_STEP),
 			MAX_SUBSTEPS,
 		);
-		for (let i = 0; i < steps; i++) {
+		if (!envCollisionReady) {
+			physicsAccumulator = 0;
+		}
+		for (let i = 0; i < steps && envCollisionReady; i++) {
 			world.step();
 
 			// Update projectiles and detect collisions per substep
