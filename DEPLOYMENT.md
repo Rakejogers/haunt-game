@@ -1,6 +1,6 @@
 # Deploying to Netlify
 
-This guide will help you deploy your Rapier test project to Netlify.
+This guide covers the static Next.js export used by this project.
 
 ## Prerequisites
 
@@ -21,7 +21,7 @@ This guide will help you deploy your Rapier test project to Netlify.
 
 3. **Configure Build Settings**
    - **Build command**: `npm run build`
-   - **Publish directory**: `dist`
+   - **Publish directory**: `out`
    - Click "Deploy site"
 
 ### Option 2: Deploy via Netlify CLI
@@ -43,9 +43,9 @@ This guide will help you deploy your Rapier test project to Netlify.
 
 ## Important Notes
 
-- The `netlify.toml` file is already configured with the necessary settings
-- WASM files will be served with the correct MIME type
-- CORS headers are configured for SharedArrayBuffer support (required for Rapier)
+- The `netlify.toml` file is configured to publish the Next static export from `out`
+- WASM files are served with the correct MIME type
+- COOP and COEP headers are configured for SharedArrayBuffer support, which Rapier needs
 - The site will automatically redeploy when you push changes to your repository
 
 ## Troubleshooting
@@ -54,7 +54,7 @@ If you encounter issues:
 
 1. **Check build logs** in the Netlify dashboard
 2. **Verify WASM files** are being served correctly
-3. **Test locally** with `npm run build && npm run preview` before deploying
+3. **Test locally** with `npm run build` and `npm run preview` before deploying
 
 ## File Size Considerations
 
@@ -63,4 +63,4 @@ Your project includes large assets:
 - `tavern_mesh.glb` (11MB)
 - `orc.glb` (4.8MB)
 
-These will be uploaded to Netlify and served from their CDN. The first load might be slow, but subsequent loads will be cached. 
+These will be uploaded to Netlify and served from their CDN. The first load might be slow, but subsequent loads will be cached.
