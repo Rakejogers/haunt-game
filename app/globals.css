@@ -65,6 +65,16 @@ body {
 	cursor: pointer;
 }
 
+.tavernSecondaryButton {
+	padding: 10px 16px;
+	border: 1px solid rgb(255 255 255 / 16%);
+	border-radius: 999px;
+	background: rgb(255 255 255 / 7%);
+	color: #fff;
+	font-size: 14px;
+	cursor: pointer;
+}
+
 .tavernButton:disabled {
 	cursor: progress;
 	opacity: 0.68;
@@ -113,6 +123,126 @@ body {
 	color: #fff;
 	cursor: pointer;
 	font-size: 14px;
+}
+
+.debugPanel {
+	position: absolute;
+	top: 16px;
+	left: 16px;
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 10px;
+	z-index: 7;
+}
+
+.debugPanelToggle,
+.debugActionButton,
+.debugChipButton {
+	border: 1px solid rgb(255 255 255 / 14%);
+	background: rgb(14 18 22 / 88%);
+	color: #fff;
+	font: inherit;
+	cursor: pointer;
+}
+
+.debugPanelToggle {
+	padding: 10px 14px;
+	border-radius: 999px;
+	box-shadow: 0 14px 36px rgb(0 0 0 / 28%);
+}
+
+.debugPanelCard {
+	width: min(430px, calc(100vw - 32px));
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+	padding: 18px;
+	border: 1px solid var(--panel-border);
+	border-radius: 22px;
+	background:
+		radial-gradient(circle at top left, rgb(126 200 255 / 14%), transparent 38%),
+		rgb(6 9 12 / 88%);
+	box-shadow: var(--panel-shadow);
+	color: #fff;
+	backdrop-filter: blur(14px);
+}
+
+.debugPanelHeader,
+.debugPanelStatusGrid {
+	display: grid;
+	gap: 12px;
+}
+
+.debugPanelHeader {
+	grid-template-columns: minmax(0, 1fr) auto;
+	align-items: start;
+}
+
+.debugPanelHeader h2,
+.debugPanelHeader p,
+.debugPanelStatusGrid p,
+.debugPanelSection p {
+	margin: 0;
+}
+
+.debugPanelEyebrow,
+.debugPanelLabel {
+	color: #9ed4ff;
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.16em;
+	text-transform: uppercase;
+}
+
+.debugPanelShortcut,
+.debugPanelHint {
+	color: var(--text-soft);
+	font-size: 12px;
+	line-height: 1.45;
+}
+
+.debugPanelStatusGrid {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	padding: 14px;
+	border: 1px solid rgb(255 255 255 / 10%);
+	border-radius: 18px;
+	background: rgb(255 255 255 / 4%);
+}
+
+.debugPanelSection {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.debugPanelWorldList,
+.debugPanelActions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+}
+
+.debugChipButton {
+	padding: 10px 12px;
+	border-radius: 14px;
+	text-align: left;
+}
+
+.debugChipButton--active {
+	border-color: rgb(158 212 255 / 46%);
+	background: rgb(50 86 117 / 72%);
+}
+
+.debugActionButton {
+	padding: 10px 14px;
+	border-radius: 12px;
+}
+
+.debugActionButton:disabled,
+.debugChipButton:disabled {
+	cursor: not-allowed;
+	opacity: 0.5;
 }
 
 .tavernReticle {
@@ -213,6 +343,22 @@ body {
 	color: #fff;
 	font-size: 14px;
 	line-height: 1.45;
+}
+
+.tavernObjectiveWorld {
+	margin-bottom: 10px !important;
+	color: var(--accent-strong) !important;
+	font-size: 18px !important;
+	font-weight: 700;
+	line-height: 1.2 !important;
+}
+
+.tavernObjectiveMeta {
+	margin-top: 10px !important;
+	color: var(--text-soft) !important;
+	font-size: 12px !important;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
 }
 
 .conversationPanel {
@@ -381,6 +527,171 @@ body {
 	color: var(--success);
 }
 
+.campaignOverlay {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 24px;
+	background: rgb(0 0 0 / 58%);
+	z-index: 6;
+	backdrop-filter: blur(10px);
+}
+
+.campaignPanel {
+	width: min(560px, calc(100vw - 32px));
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+	padding: 24px;
+	border: 1px solid var(--panel-border);
+	border-radius: 28px;
+	background:
+		radial-gradient(circle at top, rgb(255 212 155 / 12%), transparent 42%),
+		var(--panel-bg);
+	box-shadow: var(--panel-shadow);
+	color: #fff;
+}
+
+.campaignPanel h2,
+.campaignPanel p {
+	margin: 0;
+}
+
+.campaignBody {
+	color: var(--text-soft);
+	font-size: 15px;
+	line-height: 1.6;
+}
+
+.campaignDetails {
+	display: grid;
+	gap: 6px;
+	padding: 16px;
+	border: 1px solid rgb(255 255 255 / 10%);
+	border-radius: 18px;
+	background: rgb(255 255 255 / 4%);
+}
+
+.campaignLabel {
+	color: var(--accent-strong);
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.16em;
+	text-transform: uppercase;
+}
+
+.campaignActions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 12px;
+}
+
+.leaderboardSummary,
+.leaderboardPlayerCard,
+.leaderboardBoard {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 16px;
+	border: 1px solid rgb(255 255 255 / 10%);
+	border-radius: 18px;
+	background: rgb(255 255 255 / 4%);
+}
+
+.leaderboardTime,
+.leaderboardPlayerRank {
+	margin: 0;
+	color: var(--accent-strong);
+	font-size: clamp(28px, 5vw, 44px);
+	font-weight: 700;
+	line-height: 1;
+}
+
+.leaderboardForm {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.leaderboardFormRow {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 12px;
+}
+
+.leaderboardInput {
+	min-width: 0;
+	flex: 1 1 140px;
+	padding: 12px 14px;
+	border: 1px solid rgb(255 255 255 / 16%);
+	border-radius: 14px;
+	background: rgb(255 255 255 / 7%);
+	color: #fff;
+	font: inherit;
+	font-size: 18px;
+	font-weight: 700;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+}
+
+.leaderboardInput::placeholder {
+	color: rgb(255 255 255 / 32%);
+}
+
+.leaderboardBoardHeader {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 12px;
+}
+
+.leaderboardList {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.leaderboardRow {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	padding: 12px 14px;
+	border: 1px solid rgb(255 255 255 / 9%);
+	border-radius: 16px;
+	background: rgb(255 255 255 / 3%);
+}
+
+.leaderboardRow--highlight {
+	border-color: rgb(255 212 155 / 42%);
+	background: rgb(255 212 155 / 10%);
+}
+
+.leaderboardRank {
+	width: 52px;
+	margin: 0;
+	color: var(--accent-strong);
+	font-size: 20px;
+	font-weight: 700;
+}
+
+.leaderboardEntryMeta {
+	display: flex;
+	flex: 1;
+	justify-content: space-between;
+	align-items: baseline;
+	gap: 12px;
+}
+
+.leaderboardEntryName {
+	margin: 0;
+	font-size: 18px;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+
 kbd {
 	padding: 2px 6px;
 	border: 1px solid rgb(255 255 255 / 18%);
@@ -391,6 +702,23 @@ kbd {
 }
 
 @media (max-width: 900px) {
+	.debugPanel {
+		top: auto;
+		right: 16px;
+		bottom: 16px;
+		left: 16px;
+		align-items: stretch;
+	}
+
+	.debugPanelToggle {
+		align-self: flex-start;
+	}
+
+	.debugPanelHeader,
+	.debugPanelStatusGrid {
+		grid-template-columns: 1fr;
+	}
+
 	.conversationPanel {
 		top: auto;
 		right: 16px;
@@ -403,6 +731,20 @@ kbd {
 	.tavernObjective {
 		right: 16px;
 		max-width: none;
+	}
+
+	.campaignOverlay {
+		padding: 16px;
+	}
+
+	.campaignPanel {
+		padding: 20px;
+	}
+
+	.leaderboardEntryMeta,
+	.leaderboardBoardHeader {
+		flex-direction: column;
+		align-items: flex-start;
 	}
 }
 

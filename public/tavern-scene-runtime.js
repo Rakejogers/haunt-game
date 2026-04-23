@@ -13,28 +13,33 @@ const PLAYER_HALF_HEIGHT = 0.5 * GLOBAL_SCALE;
 const PLAYER_EYE_HEIGHT = 1.0 * GLOBAL_SCALE;
 const PLAYER_JUMP_SPEED = 8.0 * GLOBAL_SCALE;
 
-const CONFIG = {
-	GRAVITY: { x: 0, y: -9.81 * GLOBAL_SCALE, z: 0 },
-	RAPIER_INIT_TIMEOUT: 10000,
-	MOVE_SPEED: 3 * GLOBAL_SCALE,
-	ENVIRONMENT_RESTITUTION: 0,
-	MUSIC_VOLUME: 0.15,
-	ENVIRONMENT: {
-		MESH: "/elegant_library_with_fireplace_collider.glb",
-		SPLATS: "/elegant_library_with_fireplace_2m.spz",
-		SPLAT_SCALE: 3,
-	},
-	AUDIO_FILES: {
-		BACKGROUND_MUSIC: "/Vince_chi_resta.mp3",
-	},
-	PLAYER_SPAWN: {
-		x: 0,
-		z: 0,
-		rayOriginY: 10,
-		rayMaxDistance: 60,
-		fallbackCenterY: 1 * GLOBAL_SCALE,
-	},
-};
+const GRAVITY = { x: 0, y: -9.81 * GLOBAL_SCALE, z: 0 };
+const RAPIER_INIT_TIMEOUT = 10000;
+const MOVE_SPEED = 3 * GLOBAL_SCALE;
+const ENVIRONMENT_RESTITUTION = 0;
+const MUSIC_VOLUME = 0.15;
+
+function createSceneConfig(world) {
+	return {
+		backgroundColor: world?.environment?.backgroundColor ?? 0x202020,
+		environment: {
+			meshUrl: world?.environment?.meshUrl ?? "",
+			meshScale: world?.environment?.meshScale ?? [-1, -1, 1],
+			splatsUrl: world?.environment?.splatsUrl ?? "",
+			splatScale: world?.environment?.splatScale ?? [3, -3, 3],
+		},
+		audio: {
+			backgroundMusic: world?.environment?.musicUrl ?? "",
+		},
+		playerSpawn: {
+			x: world?.playerSpawn?.x ?? 0,
+			z: world?.playerSpawn?.z ?? 0,
+			rayOriginY: world?.playerSpawn?.rayOriginY ?? 10,
+			rayMaxDistance: world?.playerSpawn?.rayMaxDistance ?? 60,
+			fallbackCenterY: world?.playerSpawn?.fallbackCenterY ?? 1 * GLOBAL_SCALE,
+		},
+	};
+}
 
 function setupMaterialsForLighting(object, brightnessMultiplier = 1) {
 	object.traverse((child) => {
@@ -114,11 +119,20 @@ export async function mountTavernScene({
 	container,
 	ui = {},
 	npc,
+	world,
 	callbacks = {},
 }) {
 	if (!container) {
 		throw new Error("mountTavernScene requires a container element.");
 	}
+	if (!world) {
+		throw new Error("mountTavernScene requires a world configuration.");
+	}
+	if (!npc) {
+		throw new Error("mountTavernScene requires an npc configuration.");
+	}
+
+	const sceneConfig = createSceneConfig(world);
 
 	const ownerDocument = container.ownerDocument;
 	const windowRef = ownerDocument.defaultView ?? window;
@@ -131,6 +145,7 @@ export async function mountTavernScene({
 		reticle = null,
 	} = ui;
 	const {
+		onRunStarted = null,
 		onSceneReadyChange = null,
 		onInteractionStateChange = null,
 		onInteractionRequested = null,
@@ -148,7 +163,7 @@ export async function mountTavernScene({
 	let currentInteractionState = false;
 	let currentDuckFactor = 1;
 	let targetDuckFactor = 1;
-	let mobBossLoaded = false;
+	let npcLoaded = false;
 	let sceneReady = false;
 
 	const cleanupFns = [];
@@ -176,7 +191,7 @@ export async function mountTavernScene({
 		const timeoutPromise = new Promise((_, reject) =>
 			windowRef.setTimeout(
 				() => reject(new Error("Rapier initialization timeout")),
-				CONFIG.RAPIER_INIT_TIMEOUT,
+				RAPIER_INIT_TIMEOUT,
 			),
 		);
 
@@ -191,7 +206,7 @@ export async function mountTavernScene({
 
 	const { width, height } = getViewport();
 	const scene = new THREE.Scene();
-	scene.background = new THREE.Color(0x202020);
+	scene.background = new THREE.Color(sceneConfig.backgroundColor);
 
 	const camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
 	camera.rotation.y = Math.PI;
@@ -220,8 +235,8 @@ export async function mountTavernScene({
 	pointLight.position.set(-3.2, -1, 4.5);
 	scene.add(pointLight);
 
-	const world = new RAPIER.World(CONFIG.GRAVITY);
-	let playerBody = world.createRigidBody(
+	const physicsWorld = new RAPIER.World(GRAVITY);
+	let playerBody = physicsWorld.createRigidBody(
 		RAPIER.RigidBodyDesc.dynamic()
 			.setTranslation(0, 1.2, 0)
 			.lockRotations(true)
@@ -229,7 +244,7 @@ export async function mountTavernScene({
 			.setCcdEnabled(true),
 	);
 
-	world.createCollider(
+	physicsWorld.createCollider(
 		RAPIER.ColliderDesc.capsule(PLAYER_HALF_HEIGHT, PLAYER_RADIUS)
 			.setFriction(0.8)
 			.setRestitution(0),
@@ -250,18 +265,18 @@ export async function mountTavernScene({
 	let environment = null;
 	let splatMesh = null;
 	let splatsLoaded = false;
-	let mobBoss = null;
-	let mobBossAnchorOffsetY = 1.25;
-	const mobBossAnchor = new THREE.Vector3();
+	let npcModel = null;
+	let npcAnchorOffsetY = 1.25;
+	const npcAnchor = new THREE.Vector3();
 
 	function syncMusicGain() {
 		if (!musicGain) return;
-		musicGain.gain.value = (muted ? 0 : 1) * CONFIG.MUSIC_VOLUME * currentDuckFactor;
+		musicGain.gain.value = (muted ? 0 : 1) * MUSIC_VOLUME * currentDuckFactor;
 	}
 
 	function syncSceneReadyState() {
 		const nextReady =
-			Boolean(environmentCollisionReady) && Boolean(splatsLoaded) && Boolean(mobBossLoaded);
+			Boolean(environmentCollisionReady) && Boolean(splatsLoaded) && Boolean(npcLoaded);
 
 		if (sceneReady === nextReady) return;
 		sceneReady = nextReady;
@@ -313,12 +328,17 @@ export async function mountTavernScene({
 
 	function enterRoom() {
 		if (!sceneReady) return;
+		const isFirstEntry = !hasEnteredRoom;
 
 		hasEnteredRoom = true;
 		updateOverlayVisibility();
 		updateInteractionState(true);
 		startButton?.blur?.();
 		renderer.domElement.focus?.();
+
+		if (isFirstEntry) {
+			onRunStarted?.();
+		}
 	}
 
 	function startMusicLoop() {
@@ -350,7 +370,7 @@ export async function mountTavernScene({
 		audioContext = new (windowRef.AudioContext || windowRef.webkitAudioContext)();
 		musicBuffer = await loadAudioBuffer(
 			audioContext,
-			CONFIG.AUDIO_FILES.BACKGROUND_MUSIC,
+			sceneConfig.audio.backgroundMusic,
 		).catch((error) => {
 			console.error("Unable to load background music:", error);
 			return null;
@@ -363,9 +383,9 @@ export async function mountTavernScene({
 		if (!playerBody) return;
 
 		const { x, z, rayOriginY, rayMaxDistance, fallbackCenterY } =
-			CONFIG.PLAYER_SPAWN;
+			sceneConfig.playerSpawn;
 		const ray = new RAPIER.Ray({ x, y: rayOriginY, z }, { x: 0, y: -1, z: 0 });
-		const hit = world.castRayAndGetNormal(ray, rayMaxDistance, true);
+		const hit = physicsWorld.castRayAndGetNormal(ray, rayMaxDistance, true);
 		let centerY = fallbackCenterY;
 
 		if (hit && hit.toi > 0.05) {
@@ -387,7 +407,7 @@ export async function mountTavernScene({
 			{ x: 0, y: -1, z: 0 },
 		);
 		const footOffset = PLAYER_HALF_HEIGHT + PLAYER_RADIUS;
-		const hit = world.castRayAndGetNormal(ray, footOffset + 0.6, true);
+		const hit = physicsWorld.castRayAndGetNormal(ray, footOffset + 0.6, true);
 		if (!hit) return false;
 
 		const normalY = hit.normal ? hit.normal.y : 1;
@@ -415,35 +435,35 @@ export async function mountTavernScene({
 		let targetX = 0;
 		let targetZ = 0;
 		if (moveDirection.lengthSq() > 0) {
-			moveDirection.normalize().multiplyScalar(CONFIG.MOVE_SPEED);
+			moveDirection.normalize().multiplyScalar(MOVE_SPEED);
 			targetX = moveDirection.x;
 			targetZ = moveDirection.z;
 		}
 
 		const currentVelocity = playerBody.linvel();
 		let targetY = currentVelocity.y;
-		if (keyState.KeyR) targetY += CONFIG.MOVE_SPEED;
-		if (keyState.KeyF) targetY -= CONFIG.MOVE_SPEED;
+		if (keyState.KeyR) targetY += MOVE_SPEED;
+		if (keyState.KeyF) targetY -= MOVE_SPEED;
 
 		playerBody.setLinvel({ x: targetX, y: targetY, z: targetZ }, true);
 	}
 
-	function updateMobBossAnchor() {
-		if (!mobBoss || typeof mobBoss.getWorldPosition !== "function") return;
-		mobBoss.getWorldPosition(mobBossAnchor);
-		mobBossAnchor.y += mobBossAnchorOffsetY;
+	function updateNpcAnchor() {
+		if (!npcModel || typeof npcModel.getWorldPosition !== "function") return;
+		npcModel.getWorldPosition(npcAnchor);
+		npcAnchor.y += npcAnchorOffsetY;
 	}
 
 	function updateInteractionState(force = false) {
-		updateMobBossAnchor();
+		updateNpcAnchor();
 
 		let canInteract = false;
-		if (mobBoss && hasEnteredRoom && !conversationActive) {
+		if (npcModel && hasEnteredRoom && !conversationActive) {
 			const forward = new THREE.Vector3();
 			camera.getWorldDirection(forward);
 			forward.normalize();
 
-			const toNpc = mobBossAnchor.clone().sub(camera.position);
+			const toNpc = npcAnchor.clone().sub(camera.position);
 			const distance = toNpc.length();
 			const facing = distance > 0.001 ? forward.dot(toNpc.normalize()) : 0;
 
@@ -499,11 +519,11 @@ export async function mountTavernScene({
 	if (loadingElement) loadingElement.style.display = "block";
 	onSceneReadyChange?.(false);
 
-	gltfLoader.load(CONFIG.ENVIRONMENT.MESH, (gltf) => {
+	gltfLoader.load(sceneConfig.environment.meshUrl, (gltf) => {
 		if (disposed) return;
 
 		environment = gltf.scene;
-		environment.scale.set(-1, -1, 1);
+		environment.scale.set(...sceneConfig.environment.meshScale);
 		scene.add(environment);
 		environment.updateMatrixWorld(true);
 
@@ -527,10 +547,10 @@ export async function mountTavernScene({
 				}
 			}
 
-			const body = world.createRigidBody(RAPIER.RigidBodyDesc.fixed());
-			world.createCollider(
+			const body = physicsWorld.createRigidBody(RAPIER.RigidBodyDesc.fixed());
+			physicsWorld.createCollider(
 				RAPIER.ColliderDesc.trimesh(vertices, indices).setRestitution(
-					CONFIG.ENVIRONMENT_RESTITUTION,
+					ENVIRONMENT_RESTITUTION,
 				),
 				body,
 			);
@@ -545,7 +565,7 @@ export async function mountTavernScene({
 	});
 
 	splatMesh = new SplatMesh({
-		url: CONFIG.ENVIRONMENT.SPLATS,
+		url: sceneConfig.environment.splatsUrl,
 		onLoad: () => {
 			if (disposed) return;
 
@@ -555,33 +575,29 @@ export async function mountTavernScene({
 			syncSceneReadyState();
 		},
 	});
-	splatMesh.scale.set(
-		CONFIG.ENVIRONMENT.SPLAT_SCALE,
-		-CONFIG.ENVIRONMENT.SPLAT_SCALE,
-		CONFIG.ENVIRONMENT.SPLAT_SCALE,
-	);
+	splatMesh.scale.set(...sceneConfig.environment.splatScale);
 
 	fbxLoader.load(npc.modelKey, (fbx) => {
 		if (disposed) return;
 
-		mobBoss = fbx;
-		mobBoss.scale.set(...npc.scale);
-		mobBoss.position.set(...npc.position);
-		mobBoss.rotation.y = npc.rotation;
-		scene.add(mobBoss);
-		setupMaterialsForLighting(mobBoss, 2);
-		mobBossLoaded = true;
+		npcModel = fbx;
+		npcModel.scale.set(...npc.scale);
+		npcModel.position.set(...npc.position);
+		npcModel.rotation.y = npc.rotation;
+		scene.add(npcModel);
+		setupMaterialsForLighting(npcModel, npc.lightingBrightness ?? 2);
+		npcLoaded = true;
 
 		if (fbx.animations?.length) {
-			animationMixers.mobBoss = new THREE.AnimationMixer(mobBoss);
+			animationMixers.npc = new THREE.AnimationMixer(npcModel);
 			for (const clip of fbx.animations) {
-				animationMixers.mobBoss.clipAction(clip).play();
+				animationMixers.npc.clipAction(clip).play();
 			}
 		}
 
-		const box = new THREE.Box3().setFromObject(mobBoss);
+		const box = new THREE.Box3().setFromObject(npcModel);
 		const size = box.getSize(new THREE.Vector3());
-		mobBossAnchorOffsetY = Math.max(size.y * 0.55, 0.9);
+		npcAnchorOffsetY = Math.max(size.y * 0.55, 0.9);
 		syncSceneReadyState();
 		updateInteractionState(true);
 	});
@@ -639,7 +655,7 @@ export async function mountTavernScene({
 		if (!environmentCollisionReady) physicsAccumulator = 0;
 
 		for (let step = 0; step < steps && environmentCollisionReady; step += 1) {
-			world.step();
+			physicsWorld.step();
 			physicsAccumulator -= FIXED_TIME_STEP;
 		}
 

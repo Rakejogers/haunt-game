@@ -84,6 +84,8 @@ export function createGrokVoiceClient({
 	let activeAssistantItemId = null;
 	let pendingFunctionCalls = [];
 	let objectiveUnlocked = false;
+	let pendingObjectiveCompletion = null;
+	let awaitingObjectiveWrapUp = false;
 	let playbackEndsAt = 0;
 	let playbackIdleTimer = null;
 	let outputSources = new Set();
@@ -316,12 +318,12 @@ export function createGrokVoiceClient({
 				}
 
 				objectiveUnlocked = true;
-				onObjectiveComplete?.({
+				pendingObjectiveCompletion = {
 					npcId: npc.id,
 					secretId: npc.secretId,
 					summary: args.summary ?? "",
 					confidence: args.confidence ?? 0,
-				});
+				};
 
 				return {
 					callId: event.call_id,
@@ -347,6 +349,7 @@ export function createGrokVoiceClient({
 		}
 
 		await waitForPlaybackComplete();
+		awaitingObjectiveWrapUp = Boolean(pendingObjectiveCompletion);
 		sendEvent({ type: "response.create" });
 		updateListeningState();
 	}
@@ -387,7 +390,25 @@ export function createGrokVoiceClient({
 
 			case "response.done": {
 				finalizeAssistantTurn();
-				void executeFunctionCalls();
+
+				if (pendingFunctionCalls.length > 0) {
+					void executeFunctionCalls();
+					updateListeningState();
+					break;
+				}
+
+				if (awaitingObjectiveWrapUp && pendingObjectiveCompletion) {
+					const completionPayload = pendingObjectiveCompletion;
+					awaitingObjectiveWrapUp = false;
+					pendingObjectiveCompletion = null;
+
+					void (async () => {
+						await waitForPlaybackComplete();
+						if (disposed) return;
+						onObjectiveComplete?.(completionPayload);
+					})();
+				}
+
 				updateListeningState();
 				break;
 			}

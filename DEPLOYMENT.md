@@ -1,6 +1,8 @@
 # Deploying to Vercel
 
-This project now relies on Next.js server routes for xAI ephemeral token minting, so it should be deployed to a runtime-capable host such as Vercel.
+This project now relies on Next.js server routes for xAI ephemeral token minting
+and leaderboard reads/writes, so it should be deployed to a runtime-capable
+host.
 
 ## Prerequisites
 
@@ -50,6 +52,9 @@ This project now relies on Next.js server routes for xAI ephemeral token minting
 - COOP and COEP headers are configured in `next.config.mjs` for SharedArrayBuffer support
 - WASM assets are explicitly served with the correct MIME type
 - The browser authenticates to xAI using ephemeral tokens only; the API key stays server-side
+- The current leaderboard uses a local SQLite file at `data/leaderboard.sqlite`,
+  so it only persists correctly on a single long-lived host. It is not a
+  durable production choice for ephemeral serverless filesystems.
 
 ## Troubleshooting
 

@@ -6,6 +6,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 /** @type {import('next').NextConfig} */
 const nextConfig = {
 	outputFileTracingRoot: __dirname,
+	serverExternalPackages: ["@tursodatabase/database"],
 	async headers() {
 		return [
 			{

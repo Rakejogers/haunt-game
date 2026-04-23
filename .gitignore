@@ -5,3 +5,16 @@ node_modules/
 .DS_Store 
 public_extra/
 .env.local
+data/
+
+.env.*
+
+.env
+.env.development
+.env.production
+.env.test
+.env.test.local
+.env.production
+.env.production.local
+.env.test
+.env.test.local

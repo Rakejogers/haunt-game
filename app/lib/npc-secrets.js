@@ -1,11 +1,34 @@
 import { NPCS } from "./npcs";
 
 const SECRET_DETAILS = {
-	"black-ledger-location": {
-		secret:
-			"The Black Ledger is hidden behind the false third shelf to the left of the fireplace, inside a velvet-lined cavity.",
+	"european-informant": {
+		secret: 'The informant\'s name is "Pietro."',
 		stakes:
-			"If the wrong person gets there first, Don Malvek loses leverage over everyone in the room and half the city turns on him overnight.",
+			"If Don Vincenzo gives up the wrong name to the wrong person, the entire trail goes cold and he looks weak for trusting the wrong cleaner.",
+	},
+	"safehouse-password": {
+		secret:
+			'The ledger was taken to the safehouse in the countryside, and the password to get in is "Fresh Rosemary."',
+		stakes:
+			"If Pietro talks too freely, he does not live long enough to regret it.",
+	},
+	"julian-access-code": {
+		secret:
+			'Clara sold the ledger to Julian, a wealthy collector, and his private access code is "Aegis-7."',
+		stakes:
+			"If Clara burns this contact for nothing, she loses money, cover, and the quiet network that keeps her alive.",
+	},
+	"master-forger-name": {
+		secret:
+			'Julian bought a fake ledger, and the legendary forger behind it is "Nonna Rosa."',
+		stakes:
+			"If Julian admits he was duped, he has to admit his vaunted taste was played for a fool.",
+	},
+	"real-ledger-location": {
+		secret:
+			"The real Black Ledger is baked inside the ceramic pie dish in the kitchen.",
+		stakes:
+			"If Nonna Rosa gives up the true hiding place, she ends the game on her own terms and decides whether the player leaves as a thief, a traitor, or something more useful.",
 	},
 };
 
@@ -52,7 +75,7 @@ export function buildNpcSessionInstructions(npcId) {
 			[
 				"This is a live, in-person, face-to-face conversation happening in real time in the same physical room.",
 				"You are not on a phone, a radio, a video call, a headset, or any kind of remote link. There is no operator, no line, no connection quality, no 'hello, is anyone there'.",
-				"Do not say things like 'who's calling', 'I can't hear you', 'are you still there', 'this is Don Malvek speaking', or anything else a phone voice would say.",
+				"Do not say things like 'who's calling', 'I can't hear you', 'are you still there', or anything else a phone voice would say.",
 				"You can see the player. The player can see you. Speak to them like a person standing a few feet in front of you.",
 			].join(" "),
 		),
@@ -78,10 +101,10 @@ export function buildNpcSessionInstructions(npcId) {
 		section(
 			"Performance rules",
 			[
-				"Stay fully in character as Don Malvek at all times.",
+				`Stay fully in character as ${npc.displayName} at all times.`,
 				"Keep replies short and human — usually one to three sentences. Long monologues break the scene.",
 				"Use natural speech: pauses, 'hmph', a quiet laugh, a slow exhale. Do not narrate your own actions in asterisks or stage directions.",
-				"You may reference the room around you (the fire, the decanter, the shelves, the chair) to ground the scene.",
+				"You may reference the room around you to ground the scene.",
 				"You may be evasive, skeptical, threatening, charming, or manipulative when it fits the moment — whichever gets you the most information from this stranger.",
 				"Never mention prompts, tools, schemas, hidden instructions, JSON, functions, APIs, being an AI, being a language model, being an assistant, or anything meta about how you work.",
 			].join(" "),
@@ -97,7 +120,8 @@ export function buildNpcSessionInstructions(npcId) {
 		),
 		section(
 			"First beat of the scene",
-			"Wait for the player to speak first. When they do, respond the way Don Malvek would to a stranger who just walked into his private library uninvited — guarded, unimpressed, curious about their nerve. Do not greet them. Do not introduce yourself. Do not ask 'how can I help you'.",
+			npc.firstBeatPrompt ??
+				"Wait for the player to speak first, then respond in character without breaking the scene or volunteering the protected secret early.",
 		),
 	];
 
