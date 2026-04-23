@@ -67,6 +67,8 @@ function getTranscriptText(event) {
 
 export function createGrokVoiceClient({
 	npc,
+	attemptId,
+	worldId,
 	onStateChange,
 	onTranscriptChange,
 	onObjectiveComplete,
@@ -89,6 +91,7 @@ export function createGrokVoiceClient({
 	let playbackEndsAt = 0;
 	let playbackIdleTimer = null;
 	let outputSources = new Set();
+	let objectiveGrantId = null;
 
 	const emitState = (partial) => onStateChange?.(partial);
 	const emitTranscript = () => onTranscriptChange?.(transcriptItems.slice());
@@ -203,28 +206,21 @@ export function createGrokVoiceClient({
 	}
 
 	async function fetchSessionMaterials() {
-		const [tokenResponse, briefingResponse] = await Promise.all([
-			fetch("/api/grok/session", { method: "POST" }),
-			fetch("/api/grok/briefing", {
-				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-				},
-				body: JSON.stringify({ npcId: npc.id }),
+		const tokenResponse = await fetch("/api/grok/session", {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify({
+				attemptId,
+				worldId,
+				npcId: npc.id,
 			}),
-		]);
-
+		});
 		const tokenPayload = await tokenResponse.json();
-		const briefingPayload = await briefingResponse.json();
 
 		if (!tokenResponse.ok) {
 			throw new Error(tokenPayload?.error ?? "Unable to mint an xAI session.");
-		}
-
-		if (!briefingResponse.ok) {
-			throw new Error(
-				briefingPayload?.error ?? "Unable to load the NPC conversation briefing.",
-			);
 		}
 
 		const token = getEphemeralToken(tokenPayload);
@@ -232,13 +228,15 @@ export function createGrokVoiceClient({
 			throw new Error("xAI did not return a usable ephemeral token.");
 		}
 
-		if (!briefingPayload?.instructions) {
+		if (!tokenPayload?.sanitizedInstructions) {
 			throw new Error("Missing NPC session instructions.");
 		}
 
+		objectiveGrantId = tokenPayload.objectiveGrantId ?? null;
+
 		return {
 			token,
-			instructions: briefingPayload.instructions,
+			instructions: tokenPayload.sanitizedInstructions,
 		};
 	}
 
@@ -307,34 +305,69 @@ export function createGrokVoiceClient({
 				const isValidSecret =
 					args?.npcId === npc.id && args?.secretId === npc.secretId;
 
-				if (!isValidSecret) {
-					return {
+					if (!isValidSecret) {
+						return {
 						callId: event.call_id,
 						output: {
 							ok: false,
 							error: "Function arguments did not match the active objective.",
 						},
+						};
+					}
+
+					if (!objectiveGrantId) {
+						return {
+							callId: event.call_id,
+							output: {
+								ok: false,
+								error: "Missing objective grant for this conversation.",
+							},
+						};
+					}
+
+					const completionResponse = await fetch("/api/objective/complete", {
+						method: "POST",
+						headers: {
+							"Content-Type": "application/json",
+						},
+						body: JSON.stringify({
+							attemptId,
+							objectiveGrantId,
+							npcId: npc.id,
+							secretId: npc.secretId,
+							summary: args.summary ?? "",
+							confidence: args.confidence ?? 0,
+						}),
+					});
+					const completionPayload = await completionResponse.json();
+
+					if (!completionResponse.ok) {
+						return {
+							callId: event.call_id,
+							output: {
+								ok: false,
+								error:
+									completionPayload?.error ??
+									"The server rejected the objective completion.",
+							},
+						};
+					}
+
+					objectiveUnlocked = true;
+					pendingObjectiveCompletion = completionPayload;
+					objectiveGrantId = null;
+
+					return {
+						callId: event.call_id,
+						output: {
+							ok: true,
+							unlocked: true,
+							npcId: npc.id,
+							secretId: npc.secretId,
+							revealText: completionPayload?.revealText ?? "",
+						},
 					};
-				}
-
-				objectiveUnlocked = true;
-				pendingObjectiveCompletion = {
-					npcId: npc.id,
-					secretId: npc.secretId,
-					summary: args.summary ?? "",
-					confidence: args.confidence ?? 0,
-				};
-
-				return {
-					callId: event.call_id,
-					output: {
-						ok: true,
-						unlocked: true,
-						npcId: npc.id,
-						secretId: npc.secretId,
-					},
-				};
-			}),
+				}),
 		);
 
 		for (const result of outputs) {
@@ -464,11 +497,11 @@ export function createGrokVoiceClient({
 							},
 						},
 						tools: [
-							{
-								type: "function",
-								name: "unlock_secret",
-								description:
-									"Mark the objective complete after the protected secret has actually been revealed in-character.",
+								{
+									type: "function",
+									name: "unlock_secret",
+									description:
+										"Request the canonical objective reveal after the player has clearly earned it in-character.",
 								parameters: {
 									type: "object",
 									properties: {
@@ -565,12 +598,13 @@ export function createGrokVoiceClient({
 
 		mediaStream = null;
 		audioContext = null;
-		mediaSource = null;
-		processor = null;
-		processorSink = null;
-		earlyAudioChunks = [];
-		pendingFunctionCalls = [];
-	}
+			mediaSource = null;
+			processor = null;
+			processorSink = null;
+			earlyAudioChunks = [];
+			pendingFunctionCalls = [];
+			objectiveGrantId = null;
+		}
 
 	return {
 		connect: async () => {

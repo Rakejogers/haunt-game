@@ -60,7 +60,7 @@ host.
 
 If you encounter issues:
 
-1. **Check Vercel function logs** for `/api/grok/session` or `/api/grok/briefing`
+1. **Check Vercel function logs** for `/api/grok/session`, `/api/objective/complete`, or `/api/leaderboard`
 2. **Verify `XAI_API_KEY`** is present in the deployment environment
 3. **Confirm cross-origin isolation headers** are present in the deployed response
 4. **Test locally** with `npm run dev` before deploying

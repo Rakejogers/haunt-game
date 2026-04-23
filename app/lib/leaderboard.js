@@ -1,8 +1,8 @@
 import { DEFAULT_WORLD_ID } from "./worlds";
 
-export const LEADERBOARD_CAMPAIGN_ID = "ledger-trail-v1";
+export const LEADERBOARD_CAMPAIGN_ID = "ledger-trail-v2";
 export const LEADERBOARD_LIMIT = 10;
-export const RUN_STORAGE_KEY = "haunt-game-run-state:v1";
+export const RUN_STORAGE_KEY = "haunt-game-run-state:v2";
 
 export function sanitizeInitials(value) {
 	return String(value ?? "")
@@ -65,14 +65,19 @@ export function isFreshCampaignState(campaign) {
 }
 
 export function getRunIneligibilityMessage(runState) {
-	switch (runState?.invalidationReason) {
-		case "page_reload":
-			return "This completion does not qualify because the page was reloaded or the run resumed mid-attempt.";
-		case "restored_progress":
-			return "This completion does not qualify because it started from saved campaign progress instead of a fresh uninterrupted run.";
-		case "already_submitted":
+	switch (runState?.rankedStatus) {
+		case "submitted":
 			return "This run has already been submitted to the leaderboard.";
+		case "not_started":
+			return "Start a fresh run in World 1 to post a ranked time.";
 		default:
-			return "Only uninterrupted fresh runs that start at World 1 can be submitted.";
+			break;
+	}
+
+	switch (runState?.invalidationReason) {
+		case "reset":
+			return "Start a fresh run in World 1 to post a ranked time.";
+		default:
+			return "Only server-attested full clears can be submitted to the leaderboard.";
 	}
 }

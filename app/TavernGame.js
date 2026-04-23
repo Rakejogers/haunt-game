@@ -13,14 +13,9 @@ import {
 } from "./lib/leaderboard";
 import { createGrokVoiceClient } from "./lib/grok-voice-client";
 import { getNpcById } from "./lib/npcs";
-import {
-	CAMPAIGN_WORLDS,
-	DEFAULT_WORLD_ID,
-	getNextWorld,
-	getWorldById,
-} from "./lib/worlds";
+import { CAMPAIGN_WORLDS, DEFAULT_WORLD_ID, getWorldById } from "./lib/worlds";
 
-const CAMPAIGN_STORAGE_KEY = "haunt-game-campaign-progress:v2";
+const CAMPAIGN_STORAGE_KEY = "haunt-game-campaign-progress:v3";
 
 const DEFAULT_UI_STATE = {
 	phase: "exploration",
@@ -40,15 +35,16 @@ const DEFAULT_CAMPAIGN_STATE = {
 };
 
 const DEFAULT_RUN_STATE = {
-	runId: "",
+	attemptId: "",
 	campaignId: LEADERBOARD_CAMPAIGN_ID,
+	status: "idle",
+	rankedStatus: "not_started",
 	startedAtMs: null,
 	completedAtMs: null,
 	submittedAtMs: null,
 	submittedEntryId: null,
 	submittedDisplayInitials: "",
 	playerRank: null,
-	isContinuousRun: false,
 	invalidationReason: "",
 };
 
@@ -63,7 +59,11 @@ const DEFAULT_LEADERBOARD_STATE = {
 	playerRank: null,
 };
 
-function createUiState({ activeNpcId, objectiveComplete = false, campaignComplete = false }) {
+function createUiState({
+	activeNpcId,
+	objectiveComplete = false,
+	campaignComplete = false,
+}) {
 	return {
 		...DEFAULT_UI_STATE,
 		activeNpcId,
@@ -94,34 +94,23 @@ function getStatusLabel(session, objectiveComplete, campaignComplete) {
 	}
 }
 
-function sanitizeStoredProgress(value) {
-	if (!value || typeof value !== "object") return null;
-
-	const validWorldIds = new Set(CAMPAIGN_WORLDS.map((world) => world.id));
-	const completedWorldIds = Array.isArray(value.completedWorldIds)
-		? value.completedWorldIds.filter((worldId) => validWorldIds.has(worldId))
-		: [];
-	const currentWorldId = validWorldIds.has(value.currentWorldId)
-		? value.currentWorldId
-		: DEFAULT_WORLD_ID;
-
-	return {
-		currentWorldId,
-		completedWorldIds,
-		campaignComplete: Boolean(value.campaignComplete),
-	};
+function normalizeRuntimeEnvironment(value) {
+	return typeof value === "string" ? value.trim().toLowerCase() : "";
 }
 
-function readStoredProgress() {
-	if (typeof window === "undefined") return null;
+function isDebugRuntimeEnvironment(value) {
+	const normalizedValue = normalizeRuntimeEnvironment(value);
+	return normalizedValue === "dev" || normalizedValue === "development";
+}
 
-	try {
-		const rawValue = window.localStorage.getItem(CAMPAIGN_STORAGE_KEY);
-		if (!rawValue) return null;
-		return sanitizeStoredProgress(JSON.parse(rawValue));
-	} catch {
-		return null;
-	}
+function isDefaultCampaignState(campaign) {
+	return (
+		campaign.currentWorldId === DEFAULT_WORLD_ID &&
+		Array.isArray(campaign.completedWorldIds) &&
+		campaign.completedWorldIds.length === 0 &&
+		!campaign.campaignComplete &&
+		!campaign.pendingTransition
+	);
 }
 
 function persistProgress(progress) {
@@ -142,69 +131,6 @@ function clearStoredProgress() {
 	window.localStorage.removeItem(CAMPAIGN_STORAGE_KEY);
 }
 
-function addCompletedWorld(completedWorldIds, worldId) {
-	return completedWorldIds.includes(worldId)
-		? completedWorldIds
-		: [...completedWorldIds, worldId];
-}
-
-function hasStoredRunState(runState) {
-	return Boolean(
-		runState?.runId ||
-			runState?.startedAtMs ||
-			runState?.completedAtMs ||
-			runState?.submittedAtMs ||
-			runState?.submittedEntryId ||
-			runState?.submittedDisplayInitials ||
-			runState?.playerRank ||
-			runState?.invalidationReason,
-	);
-}
-
-function sanitizeStoredRunState(value) {
-	if (!value || typeof value !== "object") return null;
-
-	return {
-		runId: typeof value.runId === "string" ? value.runId : "",
-		campaignId:
-			value.campaignId === LEADERBOARD_CAMPAIGN_ID
-				? value.campaignId
-				: LEADERBOARD_CAMPAIGN_ID,
-		startedAtMs: Number.isFinite(value.startedAtMs) ? Number(value.startedAtMs) : null,
-		completedAtMs: Number.isFinite(value.completedAtMs)
-			? Number(value.completedAtMs)
-			: null,
-		submittedAtMs: Number.isFinite(value.submittedAtMs)
-			? Number(value.submittedAtMs)
-			: null,
-		submittedEntryId: Number.isFinite(value.submittedEntryId)
-			? Number(value.submittedEntryId)
-			: null,
-		submittedDisplayInitials:
-			typeof value.submittedDisplayInitials === "string"
-				? value.submittedDisplayInitials
-				: "",
-		playerRank: Number.isFinite(value.playerRank) ? Number(value.playerRank) : null,
-		isContinuousRun: Boolean(value.isContinuousRun),
-		invalidationReason:
-			typeof value.invalidationReason === "string"
-				? value.invalidationReason
-				: "",
-	};
-}
-
-function readStoredRunState() {
-	if (typeof window === "undefined") return null;
-
-	try {
-		const rawValue = window.localStorage.getItem(RUN_STORAGE_KEY);
-		if (!rawValue) return null;
-		return sanitizeStoredRunState(JSON.parse(rawValue));
-	} catch {
-		return null;
-	}
-}
-
 function persistRunState(runState) {
 	if (typeof window === "undefined") return;
 	window.localStorage.setItem(RUN_STORAGE_KEY, JSON.stringify(runState));
@@ -215,48 +141,90 @@ function clearStoredRunState() {
 	window.localStorage.removeItem(RUN_STORAGE_KEY);
 }
 
-function createRunId() {
-	if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-		return crypto.randomUUID();
+function buildCampaignStateFromAttempt(attemptSummary) {
+	if (!attemptSummary?.attemptId) {
+		return DEFAULT_CAMPAIGN_STATE;
 	}
 
-	return `run-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
-function normalizeRuntimeEnvironment(value) {
-	return typeof value === "string" ? value.trim().toLowerCase() : "";
-}
-
-function isDebugRuntimeEnvironment(value) {
-	const normalizedValue = normalizeRuntimeEnvironment(value);
-	return normalizedValue === "dev" || normalizedValue === "development";
-}
-
-function createCampaignStateForWorld(worldId) {
-	const world = getWorldById(worldId);
-	const worldIndex = CAMPAIGN_WORLDS.findIndex(
-		(candidateWorld) => candidateWorld.id === world.id,
-	);
-
 	return {
-		currentWorldId: world.id,
-		completedWorldIds: CAMPAIGN_WORLDS.slice(0, Math.max(worldIndex, 0)).map(
-			(candidateWorld) => candidateWorld.id,
-		),
-		campaignComplete: false,
+		currentWorldId: attemptSummary.currentWorldId || DEFAULT_WORLD_ID,
+		completedWorldIds: Array.isArray(attemptSummary.completedWorldIds)
+			? attemptSummary.completedWorldIds
+			: [],
+		campaignComplete: Boolean(attemptSummary.campaignComplete),
 		pendingTransition: null,
 	};
 }
 
-function createCompletedCampaignState() {
-	const finalWorld = CAMPAIGN_WORLDS[CAMPAIGN_WORLDS.length - 1] ?? getWorldById(DEFAULT_WORLD_ID);
+function buildRunStateFromAttempt(attemptSummary) {
+	if (!attemptSummary?.attemptId) {
+		return DEFAULT_RUN_STATE;
+	}
 
 	return {
-		currentWorldId: finalWorld.id,
-		completedWorldIds: CAMPAIGN_WORLDS.map((world) => world.id),
-		campaignComplete: true,
-		pendingTransition: null,
+		attemptId: attemptSummary.attemptId,
+		campaignId: attemptSummary.campaignId || LEADERBOARD_CAMPAIGN_ID,
+		status: attemptSummary.status || "idle",
+		rankedStatus: attemptSummary.rankedStatus || "not_started",
+		startedAtMs: attemptSummary.startedAt ? Date.parse(attemptSummary.startedAt) : null,
+		completedAtMs: attemptSummary.completedAt
+			? Date.parse(attemptSummary.completedAt)
+			: null,
+		submittedAtMs: attemptSummary.submittedAt
+			? Date.parse(attemptSummary.submittedAt)
+			: null,
+		submittedEntryId: Number.isFinite(attemptSummary.submittedEntryId)
+			? Number(attemptSummary.submittedEntryId)
+			: null,
+		submittedDisplayInitials: attemptSummary.submittedDisplayInitials || "",
+		playerRank: Number.isFinite(attemptSummary.playerRank)
+			? Number(attemptSummary.playerRank)
+			: null,
+		invalidationReason: attemptSummary.invalidationReason || "",
 	};
+}
+
+function createPendingTransition(fromWorldId, toWorldId) {
+	if (!toWorldId) return null;
+
+	const fromWorld = getWorldById(fromWorldId);
+	const nextWorld = getWorldById(toWorldId);
+
+	return {
+		fromWorldId,
+		toWorldId,
+		title: fromWorld.transitionTitle,
+		body: fromWorld.transitionBody,
+		nextWorldName: nextWorld.name,
+		nextObjectiveLabel: nextWorld.objectiveLabel,
+	};
+}
+
+function getDebugRunStateLabel(runState) {
+	switch (runState.status) {
+		case "in_progress":
+			return "Eligible in progress";
+		case "completed":
+			return "Eligible complete";
+		case "submitted":
+			return "Submitted";
+		default:
+			return runState.attemptId ? "Unavailable" : "Not started";
+	}
+}
+
+async function requestJson(url, options = {}, fallbackMessage) {
+	const response = await fetch(url, {
+		cache: "no-store",
+		...options,
+	});
+	const payload = await response.json().catch(() => ({}));
+
+	if (!response.ok) {
+		throw new Error(payload?.error || fallbackMessage);
+	}
+
+	return payload;
 }
 
 export default function TavernGame({ runtimeEnvironment = "" }) {
@@ -271,6 +239,7 @@ export default function TavernGame({ runtimeEnvironment = "" }) {
 	const campaignRef = useRef(DEFAULT_CAMPAIGN_STATE);
 	const sessionRef = useRef(DEFAULT_UI_STATE);
 	const runRef = useRef(DEFAULT_RUN_STATE);
+	const startAttemptPromiseRef = useRef(null);
 
 	const [loadError, setLoadError] = useState("");
 	const [sceneReady, setSceneReady] = useState(false);
@@ -288,16 +257,19 @@ export default function TavernGame({ runtimeEnvironment = "" }) {
 	const normalizedRuntimeEnvironment = normalizeRuntimeEnvironment(runtimeEnvironment);
 	const debugModeEnabled = isDebugRuntimeEnvironment(runtimeEnvironment);
 
+	function applyCampaignState(nextCampaign) {
+		campaignRef.current = nextCampaign;
+		setCampaign(nextCampaign);
+	}
+
 	function applyRunState(nextRunState) {
 		runRef.current = nextRunState;
 		setRunState(nextRunState);
+	}
 
-		if (hasStoredRunState(nextRunState)) {
-			persistRunState(nextRunState);
-			return;
-		}
-
-		clearStoredRunState();
+	function syncFromAttemptSummary(attemptSummary) {
+		applyCampaignState(buildCampaignStateFromAttempt(attemptSummary));
+		applyRunState(buildRunStateFromAttempt(attemptSummary));
 	}
 
 	useEffect(() => {
@@ -309,63 +281,61 @@ export default function TavernGame({ runtimeEnvironment = "" }) {
 	}, [session]);
 
 	useEffect(() => {
-		const storedProgress = readStoredProgress();
-		const storedRunState = readStoredRunState();
-
-		if (storedProgress) {
-			setCampaign((previous) => ({
-				...previous,
-				...storedProgress,
-			}));
-		}
-
-		if (storedRunState) {
-			const restoredRunState =
-				storedRunState.startedAtMs &&
-				!storedRunState.completedAtMs &&
-				!storedRunState.submittedAtMs
-					? {
-							...storedRunState,
-							isContinuousRun: false,
-							invalidationReason:
-								storedRunState.invalidationReason || "page_reload",
-						}
-					: storedRunState;
-			applyRunState(restoredRunState);
-		} else if (storedProgress) {
-			applyRunState({
-				...DEFAULT_RUN_STATE,
-				invalidationReason: "restored_progress",
-			});
-		}
-
-		setProgressReady(true);
-	}, []);
+		runRef.current = runState;
+	}, [runState]);
 
 	useEffect(() => {
 		if (!progressReady) return;
 
-		function handleBeforeUnload() {
-			const currentRunState = runRef.current;
-
-			if (
-				!currentRunState.startedAtMs ||
-				currentRunState.completedAtMs ||
-				currentRunState.submittedAtMs
-			) {
-				return;
-			}
-
-			persistRunState({
-				...currentRunState,
-				isContinuousRun: false,
-				invalidationReason: currentRunState.invalidationReason || "page_reload",
-			});
+		if (runState.attemptId || !isDefaultCampaignState(campaign)) {
+			persistProgress(campaign);
+		} else {
+			clearStoredProgress();
 		}
 
-		window.addEventListener("beforeunload", handleBeforeUnload);
-		return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-	}, [progressReady]);
+		if (runState.attemptId) {
+			persistRunState(runState);
+		} else {
+			clearStoredRunState();
+		}
+	}, [campaign, progressReady, runState]);
+
+	useEffect(() => {
+		let cancelled = false;
+
+		async function hydrateAttempt() {
+			setLoadError("");
+
+			try {
+				const payload = await requestJson(
+					"/api/attempt/current",
+					{},
+					"Unable to restore the secure run state.",
+				);
+				if (cancelled) return;
+				syncFromAttemptSummary(payload?.attempt ?? null);
+			} catch (error) {
+				if (cancelled) return;
+				console.error("Failed to restore secure run state:", error);
+				syncFromAttemptSummary(null);
+				setLoadError(
+					error instanceof Error
+						? error.message
+						: "Unable to restore the secure run state.",
+				);
+			} finally {
+				if (!cancelled) {
+					setProgressReady(true);
+				}
+			}
+		}
+
+		void hydrateAttempt();
+
+		return () => {
+			cancelled = true;
+		};
+	}, []);
 
 	const activeWorld = getWorldById(campaign.currentWorldId);
 	const activeNpc = getNpcById(activeWorld.npcId);
@@ -387,7 +357,7 @@ export default function TavernGame({ runtimeEnvironment = "" }) {
 		!campaign.pendingTransition &&
 		!campaign.campaignComplete;
 	const startButtonLabel = !progressReady
-		? "Restoring campaign..."
+		? "Restoring secure run..."
 		: sceneReady
 			? `Enter ${activeWorld.name}`
 			: `Preparing ${activeWorld.name}...`;
@@ -397,21 +367,13 @@ export default function TavernGame({ runtimeEnvironment = "" }) {
 			: null;
 	const canSubmitScore =
 		campaign.campaignComplete &&
-		runState.isContinuousRun &&
-		Number.isFinite(finalElapsedMs) &&
+		runState.status === "completed" &&
+		Boolean(runState.attemptId) &&
 		!runState.submittedAtMs;
 	const leaderboardMessage = runState.submittedAtMs
 		? `Submitted as ${runState.submittedDisplayInitials || "your score"}.`
 		: getRunIneligibilityMessage(runState);
-	const debugRunStateLabel = !runState.startedAtMs
-		? "Not started"
-		: runState.completedAtMs
-			? runState.isContinuousRun
-				? "Eligible complete"
-				: "Practice complete"
-			: runState.isContinuousRun
-				? "Eligible in progress"
-				: "Practice in progress";
+	const debugRunStateLabel = getDebugRunStateLabel(runState);
 
 	useEffect(() => {
 		if (!progressReady) return;
@@ -430,6 +392,40 @@ export default function TavernGame({ runtimeEnvironment = "" }) {
 		objectiveComplete,
 		progressReady,
 	]);
+
+	async function ensureAttemptStarted() {
+		if (runRef.current.attemptId) {
+			return {
+				attemptId: runRef.current.attemptId,
+			};
+		}
+
+		if (!isFreshCampaignState(campaignRef.current)) {
+			throw new Error(
+				"This run does not have a secure attempt. Reset and start again from World 1.",
+			);
+		}
+
+		if (startAttemptPromiseRef.current) {
+			return startAttemptPromiseRef.current;
+		}
+
+		startAttemptPromiseRef.current = (async () => {
+			const payload = await requestJson(
+				"/api/attempt/start",
+				{ method: "POST" },
+				"Unable to start a secure run right now.",
+			);
+			syncFromAttemptSummary(payload?.attempt ?? null);
+			return payload?.attempt ?? null;
+		})();
+
+		try {
+			return await startAttemptPromiseRef.current;
+		} finally {
+			startAttemptPromiseRef.current = null;
+		}
+	}
 
 	useEffect(() => {
 		if (!progressReady) return;
@@ -461,14 +457,10 @@ export default function TavernGame({ runtimeEnvironment = "" }) {
 					callbacks: {
 						onRunStarted: () => {
 							if (!isFreshCampaignState(campaignRef.current)) return;
-							if (runRef.current.startedAtMs) return;
+							if (runRef.current.attemptId) return;
 
-							applyRunState({
-								...DEFAULT_RUN_STATE,
-								runId: createRunId(),
-								campaignId: LEADERBOARD_CAMPAIGN_ID,
-								startedAtMs: Date.now(),
-								isContinuousRun: true,
+							void ensureAttemptStarted().catch((error) => {
+								console.error("Unable to secure the run start:", error);
 							});
 						},
 						onSceneReadyChange: (ready) => {
@@ -580,19 +572,13 @@ export default function TavernGame({ runtimeEnvironment = "" }) {
 			}));
 
 			try {
-				const response = await fetch(
+				const payload = await requestJson(
 					`/api/leaderboard?campaignId=${encodeURIComponent(
 						LEADERBOARD_CAMPAIGN_ID,
 					)}&limit=${LEADERBOARD_LIMIT}`,
-					{
-						cache: "no-store",
-					},
+					{},
+					"Unable to load the leaderboard.",
 				);
-				const payload = await response.json();
-
-				if (!response.ok) {
-					throw new Error(payload?.error || "Unable to load the leaderboard.");
-				}
 
 				if (cancelled) return;
 
@@ -665,93 +651,100 @@ export default function TavernGame({ runtimeEnvironment = "" }) {
 			transcriptItems: [],
 		}));
 
-		const client = createGrokVoiceClient({
-			npc: activeNpc,
-			onStateChange: (partial) => {
-				setSession((previous) => ({
-					...previous,
-					...partial,
-					error: partial.error ?? previous.error,
-					overlayOpen: true,
-				}));
-			},
-			onTranscriptChange: (transcriptItems) => {
-				setSession((previous) => ({
-					...previous,
-					transcriptItems,
-				}));
-			},
-			onObjectiveComplete: () => {
-				void completeObjective();
-			},
-			onError: (error) => {
-				setSession((previous) => ({
-					...previous,
-					phase: "error",
-					voiceState: "error",
-					error:
-						error instanceof Error
-							? error.message
-							: "The Grok voice session failed.",
-					overlayOpen: true,
-				}));
-			},
-		});
-
-		voiceClientRef.current = client;
-
 		try {
+			const attempt = await ensureAttemptStarted();
+			if (!attempt?.attemptId && !runRef.current.attemptId) {
+				throw new Error("Unable to secure this conversation. Reset and try again.");
+			}
+
+			const client = createGrokVoiceClient({
+				npc: activeNpc,
+				attemptId: attempt?.attemptId ?? runRef.current.attemptId,
+				worldId: activeWorld.id,
+				onStateChange: (partial) => {
+					setSession((previous) => ({
+						...previous,
+						...partial,
+						error: partial.error ?? previous.error,
+						overlayOpen: true,
+					}));
+				},
+				onTranscriptChange: (transcriptItems) => {
+					setSession((previous) => ({
+						...previous,
+						transcriptItems,
+					}));
+				},
+				onObjectiveComplete: (payload) => {
+					void completeObjective(payload);
+				},
+				onError: (error) => {
+					setSession((previous) => ({
+						...previous,
+						phase: "error",
+						voiceState: "error",
+						error:
+							error instanceof Error
+								? error.message
+								: "The Grok voice session failed.",
+						overlayOpen: true,
+					}));
+				},
+			});
+
+			voiceClientRef.current = client;
 			await client.connect();
 		} catch (error) {
 			console.error("Unable to start Grok voice session:", error);
+			const client = voiceClientRef.current;
 			voiceClientRef.current = null;
-			await client.disconnect?.();
+			await client?.disconnect?.();
 			runtimeControllerRef.current?.setConversationActive?.(false);
 			runtimeControllerRef.current?.setMusicDuckFactor?.(1);
+			setSession((previous) => ({
+				...previous,
+				phase: "error",
+				voiceState: "error",
+				error:
+					error instanceof Error
+						? error.message
+						: "Unable to start the secure conversation.",
+				overlayOpen: true,
+			}));
 		}
 	}
 
-	async function completeObjective() {
-		const currentCampaign = campaignRef.current;
-		if (currentCampaign.completedWorldIds.includes(activeWorld.id)) return;
+	async function completeObjective(completionPayload) {
+		const nextWorldId = completionPayload?.nextWorldId ?? null;
+		const nextWorld = nextWorldId ? getWorldById(nextWorldId) : null;
+		const completedWorldIds = Array.isArray(completionPayload?.campaignState?.completedWorldIds)
+			? completionPayload.campaignState.completedWorldIds
+			: campaignRef.current.completedWorldIds;
 
-		const completedWorldIds = addCompletedWorld(
-			currentCampaign.completedWorldIds,
-			activeWorld.id,
-		);
-		const nextWorld = getNextWorld(activeWorld.id);
-		const persistedProgress = {
-			currentWorldId: nextWorld?.id ?? activeWorld.id,
-			completedWorldIds,
-			campaignComplete: !nextWorld,
-		};
-
-		persistProgress(persistedProgress);
-		await teardownConversation(nextWorld ? "objective_complete" : "campaign_complete");
-
-		if (!nextWorld) {
-			const currentRunState = runRef.current;
-			if (currentRunState.startedAtMs && !currentRunState.completedAtMs) {
-				applyRunState({
-					...currentRunState,
-					completedAtMs: Date.now(),
-				});
-			}
+		if (completionPayload?.revealText) {
+			setSession((previous) => ({
+				...previous,
+				transcriptItems: [
+					...previous.transcriptItems,
+					{
+						id: `reveal-${Date.now()}`,
+						role: "assistant",
+						speaker: activeNpc.displayName,
+						text: completionPayload.revealText,
+					},
+				],
+			}));
 		}
 
-		setCampaign({
+		await teardownConversation(nextWorld ? "objective_complete" : "campaign_complete");
+
+		applyRunState(buildRunStateFromAttempt(completionPayload?.attempt ?? null));
+		applyCampaignState({
 			currentWorldId: activeWorld.id,
 			completedWorldIds,
-			campaignComplete: !nextWorld,
+			campaignComplete: Boolean(completionPayload?.campaignComplete),
 			pendingTransition: nextWorld
-				? {
-						fromWorldId: activeWorld.id,
-						toWorldId: nextWorld.id,
-						title: activeWorld.transitionTitle,
-						body: activeWorld.transitionBody,
-						nextWorldName: nextWorld.name,
-						nextObjectiveLabel: nextWorld.objectiveLabel,
-					}
+				? createPendingTransition(activeWorld.id, nextWorld.id)
 				: null,
 		});
 	}
@@ -776,99 +769,44 @@ export default function TavernGame({ runtimeEnvironment = "" }) {
 		const transition = campaign.pendingTransition;
 		if (!transition) return;
 
-		const nextCampaign = {
+		applyCampaignState({
 			currentWorldId: transition.toWorldId,
 			completedWorldIds: campaign.completedWorldIds,
 			campaignComplete: false,
 			pendingTransition: null,
-		};
-
-		persistProgress(nextCampaign);
-		setCampaign(nextCampaign);
-	}
-
-	async function jumpToWorld(worldId) {
-		const nextCampaign = createCampaignStateForWorld(worldId);
-
-		await teardownConversation("exploration");
-		setLoadError("");
-		setLeaderboard(DEFAULT_LEADERBOARD_STATE);
-		persistProgress(nextCampaign);
-		setCampaign(nextCampaign);
-		applyRunState(
-			nextCampaign.completedWorldIds.length
-				? {
-						...DEFAULT_RUN_STATE,
-						invalidationReason: "restored_progress",
-					}
-				: DEFAULT_RUN_STATE,
-		);
-	}
-
-	async function finishCampaignForTesting({ eligible }) {
-		const nextCampaign = createCompletedCampaignState();
-		const currentRunState = runRef.current;
-		const completedAtMs = Date.now();
-		const startedAtMs =
-			currentRunState.startedAtMs ?? completedAtMs - 5 * 60 * 1000;
-
-		await teardownConversation("campaign_complete");
-		setLoadError("");
-		setLeaderboard(DEFAULT_LEADERBOARD_STATE);
-		persistProgress(nextCampaign);
-		setCampaign(nextCampaign);
-		applyRunState({
-			...DEFAULT_RUN_STATE,
-			...currentRunState,
-			runId: currentRunState.runId || createRunId(),
-			campaignId: LEADERBOARD_CAMPAIGN_ID,
-			startedAtMs,
-			completedAtMs,
-			submittedAtMs: null,
-			submittedEntryId: null,
-			submittedDisplayInitials: "",
-			playerRank: null,
-			isContinuousRun: Boolean(eligible),
-			invalidationReason: eligible
-				? ""
-				: currentRunState.invalidationReason || "debug_finish",
-		});
-	}
-
-	function resetEndingState() {
-		setLeaderboard(DEFAULT_LEADERBOARD_STATE);
-		applyRunState({
-			...runRef.current,
-			completedAtMs: null,
-			submittedAtMs: null,
-			submittedEntryId: null,
-			submittedDisplayInitials: "",
-			playerRank: null,
-			isContinuousRun: false,
-			invalidationReason:
-				runRef.current.invalidationReason || "debug_finish",
 		});
 	}
 
 	async function resetCampaign() {
 		await teardownConversation("exploration");
-		clearStoredProgress();
-		clearStoredRunState();
-		setLoadError("");
-		applyRunState(DEFAULT_RUN_STATE);
-		setLeaderboard(DEFAULT_LEADERBOARD_STATE);
-		setCampaign(DEFAULT_CAMPAIGN_STATE);
-		setSession(
-			createUiState({
-				activeNpcId: getNpcById(getWorldById(DEFAULT_WORLD_ID).npcId).id,
-			}),
-		);
+
+		try {
+			const payload = await requestJson(
+				"/api/attempt/reset",
+				{ method: "POST" },
+				"Unable to reset the secure run right now.",
+			);
+			setLoadError("");
+			setLeaderboard(DEFAULT_LEADERBOARD_STATE);
+			syncFromAttemptSummary(payload?.attempt ?? null);
+			setSession(
+				createUiState({
+					activeNpcId: getNpcById(getWorldById(DEFAULT_WORLD_ID).npcId).id,
+				}),
+			);
+		} catch (error) {
+			setLoadError(
+				error instanceof Error
+					? error.message
+					: "Unable to reset the secure run right now.",
+			);
+		}
 	}
 
 	async function submitLeaderboardScore(event) {
 		event.preventDefault();
 
-		if (!canSubmitScore || !Number.isFinite(finalElapsedMs)) return;
+		if (!canSubmitScore || !runState.attemptId) return;
 		if (!isValidInitials(leaderboard.initials)) {
 			setLeaderboard((previous) => ({
 				...previous,
@@ -885,32 +823,22 @@ export default function TavernGame({ runtimeEnvironment = "" }) {
 		}));
 
 		try {
-			const response = await fetch("/api/leaderboard", {
-				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
+			const payload = await requestJson(
+				"/api/leaderboard",
+				{
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+					},
+					body: JSON.stringify({
+						attemptId: runState.attemptId,
+						initials: leaderboard.initials,
+					}),
 				},
-				body: JSON.stringify({
-					campaignId: LEADERBOARD_CAMPAIGN_ID,
-					initials: leaderboard.initials,
-					elapsedMs: finalElapsedMs,
-				}),
-			});
-			const payload = await response.json();
+				"Unable to submit your score.",
+			);
 
-			if (!response.ok) {
-				throw new Error(payload?.error || "Unable to submit your score.");
-			}
-
-			applyRunState({
-				...runRef.current,
-				submittedAtMs: Date.now(),
-				submittedEntryId: payload?.entry?.id ?? null,
-				submittedDisplayInitials: payload?.entry?.displayInitials ?? "",
-				playerRank: payload?.playerRank ?? null,
-				invalidationReason: "already_submitted",
-			});
-
+			applyRunState(buildRunStateFromAttempt(payload?.attemptStatus ?? null));
 			setLeaderboard((previous) => ({
 				...previous,
 				submitting: false,
@@ -948,20 +876,20 @@ export default function TavernGame({ runtimeEnvironment = "" }) {
 					{progressReady ? (
 						sceneReady ? (
 							<>
-								Enter {activeWorld.name} to start moving. If mouse-look does
-								not engage, click the scene once. Then walk up to{" "}
-								{activeNpc.displayName} and press <kbd>E</kbd> when you are
-								close enough to talk.
+								Enter {activeWorld.name} to start moving. If mouse-look does not
+								engage, click the scene once. Then walk up to{" "}
+								{activeNpc.displayName} and press <kbd>E</kbd> when you are close
+								enough to talk.
 							</>
 						) : (
 							<>
-								Loading the world, splats, music, and NPC for{" "}
-								{activeWorld.name}. Then enter the scene and press <kbd>E</kbd>{" "}
-								when you are close enough to talk.
+								Loading the world, splats, music, and NPC for {activeWorld.name}.
+								Then enter the scene and press <kbd>E</kbd> when you are close
+								enough to talk.
 							</>
 						)
 					) : (
-						"Restoring your saved campaign progress..."
+						"Restoring your secure campaign progress..."
 					)}
 				</p>
 			</div>
@@ -980,7 +908,7 @@ export default function TavernGame({ runtimeEnvironment = "" }) {
 			) : null}
 			<div ref={loadingRef} className="tavernLoading">
 				<div className="tavernSpinner" />
-				{progressReady ? `Loading ${activeWorld.name}...` : "Restoring campaign..."}
+				{progressReady ? `Loading ${activeWorld.name}...` : "Restoring secure run..."}
 			</div>
 			<div className="tavernObjective">
 				<span className="tavernObjectiveLabel">Current World</span>
@@ -995,7 +923,7 @@ export default function TavernGame({ runtimeEnvironment = "" }) {
 				</p>
 				{runState.startedAtMs && !campaign.campaignComplete ? (
 					<p className="tavernObjectiveMeta">
-						Ranked run: {runState.isContinuousRun ? "eligible" : "practice only"}
+						Ranked run: {runState.status === "in_progress" ? "eligible" : "locked"}
 					</p>
 				) : null}
 				<button
@@ -1007,9 +935,7 @@ export default function TavernGame({ runtimeEnvironment = "" }) {
 				</button>
 			</div>
 			{debugModeEnabled ? (
-				<section
-					className={`debugPanel ${debugMenuOpen ? "debugPanel--open" : ""}`}
-				>
+				<section className={`debugPanel ${debugMenuOpen ? "debugPanel--open" : ""}`}>
 					<button
 						type="button"
 						className="debugPanelToggle"
@@ -1022,7 +948,7 @@ export default function TavernGame({ runtimeEnvironment = "" }) {
 							<div className="debugPanelHeader">
 								<div>
 									<p className="debugPanelEyebrow">Debug Controls</p>
-									<h2>Cheat menu</h2>
+									<h2>Secure runtime</h2>
 								</div>
 								<p className="debugPanelShortcut">Press ` to toggle</p>
 							</div>
@@ -1048,72 +974,12 @@ export default function TavernGame({ runtimeEnvironment = "" }) {
 								</div>
 							</div>
 							<div className="debugPanelSection">
-								<p className="debugPanelLabel">Jump to world</p>
-								<div className="debugPanelWorldList">
-									{CAMPAIGN_WORLDS.map((world) => (
-										<button
-											key={world.id}
-											type="button"
-											className={`debugChipButton ${world.id === activeWorld.id ? "debugChipButton--active" : ""}`}
-											onClick={() => void jumpToWorld(world.id)}
-										>
-											{world.name}
-										</button>
-									))}
-								</div>
-								<p className="debugPanelHint">
-									Jumping loads that checkpoint and marks earlier worlds complete.
-								</p>
+								<p className="debugPanelLabel">Attempt id</p>
+								<p>{runState.attemptId || "none"}</p>
 							</div>
 							<div className="debugPanelSection">
-								<p className="debugPanelLabel">Campaign shortcuts</p>
+								<p className="debugPanelLabel">Secure flow</p>
 								<div className="debugPanelActions">
-									<button
-										type="button"
-										className="debugActionButton"
-										onClick={() => void completeObjective()}
-										disabled={
-											objectiveComplete ||
-											campaign.campaignComplete ||
-											Boolean(campaign.pendingTransition)
-										}
-									>
-										Complete current objective
-									</button>
-									<button
-										type="button"
-										className="debugActionButton"
-										onClick={continueToNextWorld}
-										disabled={!campaign.pendingTransition}
-									>
-										Continue pending transition
-									</button>
-									<button
-										type="button"
-										className="debugActionButton"
-										onClick={() =>
-											void finishCampaignForTesting({ eligible: false })
-										}
-									>
-										Open practice ending
-									</button>
-									<button
-										type="button"
-										className="debugActionButton"
-										onClick={() =>
-											void finishCampaignForTesting({ eligible: true })
-										}
-									>
-										Open eligible ending
-									</button>
-									<button
-										type="button"
-										className="debugActionButton"
-										onClick={resetEndingState}
-										disabled={!campaign.campaignComplete && !runState.completedAtMs}
-									>
-										Clear ending state
-									</button>
 									<button
 										type="button"
 										className="debugActionButton"
@@ -1122,15 +988,10 @@ export default function TavernGame({ runtimeEnvironment = "" }) {
 										Reset everything
 									</button>
 								</div>
-								{runState.invalidationReason ? (
-									<p className="debugPanelHint">
-										Run invalidation reason: {runState.invalidationReason}
-									</p>
-								) : (
-									<p className="debugPanelHint">
-										Run invalidation reason: none
-									</p>
-								)}
+								<p className="debugPanelHint">
+									Server-attested progression is active, so local shortcut cheats
+									are disabled in this mode.
+								</p>
 							</div>
 						</div>
 					) : null}
@@ -1235,14 +1096,12 @@ export default function TavernGame({ runtimeEnvironment = "" }) {
 								<p className="campaignLabel">
 									{canSubmitScore ? "Official time" : "Completion time"}
 								</p>
-								<p className="leaderboardTime">
-									{formatElapsedTime(finalElapsedMs)}
-								</p>
+								<p className="leaderboardTime">{formatElapsedTime(finalElapsedMs)}</p>
 							</div>
 						) : null}
 						<p className="campaignBody">
 							{canSubmitScore
-								? "This run stayed uninterrupted from World 1 to the end, so it can be ranked."
+								? "This server-attested run is eligible for the secure leaderboard."
 								: leaderboardMessage}
 						</p>
 						{canSubmitScore ? (
